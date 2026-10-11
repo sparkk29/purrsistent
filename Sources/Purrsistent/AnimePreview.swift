@@ -43,6 +43,23 @@ enum AnimePreview {
             try write(sheet(columns: strip.count, cells: cells), to: directory.appendingPathComponent("\(strip.name).png"))
         }
 
+        let turns: [(name: String, coat: CatAppearance, motion: AnimeMotion)] = [
+            ("turn-idle", .snowball, .idle), ("turn-walk", .orange, .walk), ("turn-sit", .silver, .sit),
+        ]
+        for turn in turns {
+            let animator = AnimeCatAnimator(random: seeded())
+            animator.start(turn.motion)
+            advance(animator, by: 0.5)
+            animator.facing = .left
+            let step = AnimeCatAnimator.turnDuration / 8
+            var cells: [(String, CatAppearance, Snapshot)] = []
+            for index in 0...8 {
+                if index > 0 { advance(animator, by: step) }
+                cells.append((String(format: "%.2fs", Double(index) * step), turn.coat, Snapshot(animator)))
+            }
+            try write(sheet(columns: cells.count, cells: cells), to: directory.appendingPathComponent("\(turn.name).png"))
+        }
+
         let blink = AnimeCatAnimator(random: seeded())
         blink.start(.idle)
         var frames: [(String, CatAppearance, Snapshot)] = []
@@ -62,10 +79,12 @@ enum AnimePreview {
     private struct Snapshot {
         var pose: AnimeCatFactory.RigPose
         var particles: [AnimeParticle]
+        var mirrored: Bool
 
         init(_ animator: AnimeCatAnimator) {
             pose = animator.pose
             particles = animator.particles
+            mirrored = animator.mirrored
         }
     }
 
@@ -109,7 +128,7 @@ enum AnimePreview {
         for (index, entry) in cells.enumerated() {
             let column = index % columns, row = index / columns
             let origin = NSPoint(x: CGFloat(column) * cell, y: CGFloat(height) - CGFloat(row + 1) * (cell + label))
-            AnimeCatFactory.draw(entry.snapshot.pose, appearance: entry.appearance, particles: entry.snapshot.particles, in: NSRect(x: origin.x, y: origin.y + label, width: cell, height: cell))
+            AnimeCatFactory.draw(entry.snapshot.pose, appearance: entry.appearance, particles: entry.snapshot.particles, mirrored: entry.snapshot.mirrored, in: NSRect(x: origin.x, y: origin.y + label, width: cell, height: cell))
             let text = entry.title as NSString
             let size = text.size(withAttributes: attributes)
             text.draw(at: NSPoint(x: origin.x + (cell - size.width) / 2, y: origin.y + 6), withAttributes: attributes)

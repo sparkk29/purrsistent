@@ -13,7 +13,6 @@ final class AnimeCatRenderer {
     private let particleCanvas = Canvas()
     private var drawn: AnimeCatFactory.RigPose?
     private var drawnMirrored = false
-    private var drawnTurnScale: CGFloat = 1
 
     /// Makes the next `renderCat` draw even if the cat hasn't moved, e.g. after the coat changed
     /// or something else was shown in the view.
@@ -25,22 +24,15 @@ final class AnimeCatRenderer {
     func renderCat(_ animator: AnimeCatAnimator, appearance: CatAppearance, size: NSSize, scale: CGFloat) -> NSImage? {
         if catCanvas.resize(to: size, scale: scale) { drawn = nil }
         if let drawn,
-           animator.mirrored == drawnMirrored, animator.turnScale == drawnTurnScale,
+           animator.mirrored == drawnMirrored,
            Self.visibleChange(from: drawn, to: animator.pose) * catCanvas.pixelsPerUnit < Self.minimumVisibleChange {
             return nil
         }
         drawn = animator.pose
         drawnMirrored = animator.mirrored
-        drawnTurnScale = animator.turnScale
 
         return catCanvas.image(size: size) { rect in
-            AnimeCatFactory.draw(
-                animator.pose,
-                appearance: appearance,
-                mirrored: animator.mirrored,
-                turnScale: animator.turnScale,
-                in: rect
-            )
+            AnimeCatFactory.draw(animator.pose, appearance: appearance, mirrored: animator.mirrored, in: rect)
         }
     }
 
@@ -77,7 +69,7 @@ final class AnimeCatRenderer {
             degree * abs(a.earTwitchLeft - b.earTwitchLeft), degree * abs(a.earTwitchRight - b.earTwitchRight),
             9 * abs(a.lid - b.lid), 9 * abs(a.lidAsym - b.lidAsym),
             3 * abs(a.wide - b.wide), 2 * moved(a.look, b.look),
-            3 * abs(a.mouthOpen - b.mouthOpen), 4 * abs(a.blush - b.blush),
+            3 * abs(a.mouthOpen - b.mouthOpen), 4 * abs(a.blush - b.blush), 6 * abs(a.frontal - b.frontal),
         ].max() ?? 0
     }
 }

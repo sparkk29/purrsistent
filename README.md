@@ -97,6 +97,7 @@ In the Anime style the cat isn't a flipbook: it's a jointed vector rig (hips, sh
 
 - **Behaviors** are keyframed poses. The cat eases from wherever it is into each new one instead of cutting, and big changes of pose take longer, so nothing snaps.
 - **Life on top**: it breathes, blinks at irregular intervals with real eyelids (sometimes twice, slowly and lopsidedly when sleepy), and its ears and tail hang on springs, so they twitch, sway, and follow through on hops and landings.
+- **Turning around**: the cat swings round through facing you, its body foreshortening and its legs gathering underneath, while the tail sweeps across to the other side. It isn't a flat flip.
 - **Faces and particles**: wide eyes when surprised, a sulk when annoyed, a little "?" when something goes wrong, Zs while it sleeps, and hearts when it's happy or being stroked.
 - **States**: idle, walking, sitting, loafing, getting drowsy, sleeping, waking, stretching, yawning, grooming, scratching, happy, petted, kneading, rolling over, tail chasing, curious, pouncing, eating, startled, annoyed, being carried, falling, and leaping.
 - **Reduce Motion**: with **System Settings → Accessibility → Display → Reduce motion** on, hops and tail swishes are toned down and there are no hearts. It follows the setting live.
@@ -145,7 +146,7 @@ After changing assets, run `./scripts/bundle.sh` again.
 swift build
 .build/debug/Purrsistent --export-sounds SynthesizedSounds   # synthesized fallback sounds, for reference
 .build/debug/Purrsistent --export-logo assets/logo.png
-.build/debug/Purrsistent --export-anime-preview AnimePreview  # coat and state sheets, plus transition and blink strips
+.build/debug/Purrsistent --export-anime-preview AnimePreview  # coat and state sheets, plus transition, turning, and blink strips
 ```
 
 ## Tests

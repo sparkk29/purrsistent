@@ -74,6 +74,9 @@ enum AnimeCatFactory {
         var flipped = false
         /// 0 to 1: rosy cheeks.
         var blush: CGFloat = 0
+        /// 0 to 1: how far the cat has turned to face the viewer, as halfway through turning
+        /// around. Centers the face on the head and tucks the tail in behind the body.
+        var frontal: CGFloat = 0
         var showShadow = true
     }
 
@@ -145,6 +148,7 @@ enum AnimeCatFactory {
         pose.wide = blend(a.wide, b.wide)
         pose.look = blend(a.look, b.look)
         pose.blush = blend(a.blush, b.blush)
+        pose.frontal = blend(a.frontal, b.frontal)
 
         let mouthA = max(a.mouth.openness, a.mouthOpen), mouthB = max(b.mouth.openness, b.mouthOpen)
         pose.mouth = (t < 0.5 ? a.mouth : b.mouth) == .tongue ? .tongue : .closed
@@ -211,14 +215,12 @@ enum AnimeCatFactory {
         var decorate: ((CGContext) -> Void)?
     }
 
-    /// Draws the cat into `rect`. `mirrored` faces it left; `turnScale` squeezes it sideways
-    /// around its middle while it turns around. Particles stay upright either way.
+    /// Draws the cat into `rect`. `mirrored` faces it left; particles stay upright either way.
     static func draw(
         _ pose: RigPose,
         appearance: CatAppearance,
         particles: [AnimeParticle] = [],
         mirrored: Bool = false,
-        turnScale: CGFloat = 1,
         in rect: NSRect
     ) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
@@ -235,17 +237,14 @@ enum AnimeCatFactory {
             context.translateBy(x: canvas, y: 0)
             context.scaleBy(x: -1, y: 1)
         }
-        if turnScale != 1 {
-            let centerX = (pose.hip.x + pose.shoulder.x) / 2
-            context.translateBy(x: centerX, y: 0)
-            context.scaleBy(x: turnScale, y: 1)
-            context.translateBy(x: -centerX, y: 0)
-        }
         if pose.flipped {
             context.translateBy(x: canvas, y: 0)
             context.scaleBy(x: -1, y: 1)
         }
-        drawCat(pose, colors: colors, in: context)
+        // One-sided markings stay on the same side of the screen when the cat turns around, as
+        // a real cat's would when it turns through facing you, so they swap sides on the rig.
+        let markingSide: CGFloat = mirrored != pose.flipped ? 1 : -1
+        drawCat(pose, colors: colors, markingSide: markingSide, in: context)
         context.restoreGState()
 
         drawParticles(particles, mirrored: mirrored, colors: colors, in: context)
@@ -264,10 +263,10 @@ enum AnimeCatFactory {
         drawParticles(particles, mirrored: mirrored, colors: Colors(appearance), in: context)
     }
 
-    private static func drawCat(_ pose: RigPose, colors: Colors, in context: CGContext) {
+    private static func drawCat(_ pose: RigPose, colors: Colors, markingSide: CGFloat, in context: CGContext) {
         if pose.showShadow {
             let width = 36 * max(0.5, 1 - pose.lift / 16)
-            let centerX = (pose.hip.x + pose.shoulder.x) / 2 + 2
+            let centerX = (pose.hip.x + pose.shoulder.x) / 2 + 2 * (1 - min(1, max(0, pose.frontal)))
             context.setFillColor(NSColor.black.withAlphaComponent(0.16 * max(0.4, 1 - pose.lift / 20)).cgColor)
             context.fillEllipse(in: CGRect(x: centerX - width / 2, y: 3, width: width, height: 4.5))
         }
@@ -278,7 +277,7 @@ enum AnimeCatFactory {
         if !pose.tailInFront { drawGroup([tailPart(pose, body: body, colors: colors)], colors: colors, in: context) }
         drawGroup(body.nearParts(colors), colors: colors, in: context)
         if pose.tailInFront { drawGroup([tailPart(pose, body: body, colors: colors)], colors: colors, in: context) }
-        drawHead(pose, colors: colors, in: context)
+        drawHead(pose, colors: colors, markingSide: markingSide, in: context)
         for part in body.raisedParts(colors) { drawGroup([part], colors: colors, in: context) }
     }
 
@@ -340,7 +339,14 @@ enum AnimeCatFactory {
             normal = pose.upsideDown ? -up : up
         }
 
-        var tailBase: CGPoint { pose.hip - axis * 5.5 + normal * 1.5 }
+        /// The spine's direction for placing things along the body. It shrinks away as the cat
+        /// turns to face the viewer, when the body is seen end-on, so the markings, chest, and
+        /// haunch all line up down the middle.
+        var along: CGVector { axis * (1 - min(1, max(0, pose.frontal))) }
+        /// The spine's angle, for orienting markings, flattening out as the cat faces the viewer.
+        var angle: CGFloat { atan2(axis.dy, axis.dx) * (1 - min(1, max(0, pose.frontal))) }
+
+        var tailBase: CGPoint { pose.hip - along * 5.5 + normal * 1.5 }
 
         var torso: CGPath {
             let h = pose.hip, s = pose.shoulder
@@ -362,48 +368,67 @@ enum AnimeCatFactory {
         }
 
         var neck: CGPath {
-            let start = pose.shoulder + axis * 1.5 + normal * 2.5
+            let start = pose.shoulder + along * 1.5 + normal * 2.5
             return capsule(start, headPoint(CGPoint(x: -1, y: -3), of: pose), width: 9.5)
         }
 
         /// A soft bib of fur on the front of the chest, its tufts pointing down toward the paws.
         func chestFluff(_ fluff: CGFloat) -> CGPath {
-            let center = pose.shoulder + axis * (chestRadius * 0.45) + normal * 0.5
+            let center = pose.shoulder + along * (chestRadius * 0.45) + normal * 0.5
             let grow = 0.85 + 0.15 * fluff
             let local = furryEllipse(CGRect(x: -4.2 * grow, y: -5.6 * grow, width: 8.4 * grow, height: 11.2 * grow), tufts: [
                 Tuft(from: 300, to: 20, count: fluff > 1.3 ? 4 : 3, depth: 1 * fluff, sweep: -0.4),
             ])
-            var transform = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: atan2(axis.dy, axis.dx))
+            var transform = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: angle)
             return local.copy(using: &transform) ?? local
         }
 
         var haunch: CGPath {
-            let center = pose.hip + axis * 1.2 - normal * 0.6
-            var transform = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: atan2(axis.dy, axis.dx))
+            let center = pose.hip + along * 1.2 - normal * 0.6
+            var transform = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: angle)
             return CGPath(ellipseIn: CGRect(x: -6.8, y: -7.8, width: 13.6, height: 15.6), transform: &transform)
         }
 
-        var frontRoot: CGPoint { pose.shoulder - normal * 1.8 + axis * 0.5 }
-        var hindRoot: CGPoint { pose.hip - normal * 1.2 + axis * 1 }
+        var frontRoot: CGPoint { pose.shoulder - normal * 1.8 + along * 0.5 }
+        var hindRoot: CGPoint { pose.hip - normal * 1.2 + along * 1 }
 
         /// Shoulder to elbow to paw, the elbow pointing back.
         func frontLeg(to paw: CGPoint) -> [CGPath] {
             let bend = (pose.frontBend < 0 ? -1 : 1) * (pose.upsideDown ? -1 : 1) as CGFloat
-            let elbow = solveJoint(root: frontRoot, target: paw, upper: frontLengths.0, lower: frontLengths.1, bend: bend)
-            return limb([frontRoot, elbow, paw], widths: [5.2, 4, 3.4]) + [pawPath(paw, tilt: pawTilt(paw))]
+            let root = upright(frontRoot, over: paw)
+            let elbow = solveJoint(root: root, target: paw, upper: frontLengths.0, lower: frontLengths.1, bend: bend)
+            return limb([root, straightened(elbow, from: root, to: paw), paw], widths: [5.2, 4, 3.4]) + [pawPath(paw, tilt: pawTilt(paw))]
         }
 
         /// Hip to knee (pointing forward) to hock (pointing back) to paw: the springy zigzag of a
         /// cat's hind leg. The foot bone leans back from the paw toward the hip.
         func hindLeg(to paw: CGPoint) -> [CGPath] {
             let flip: CGFloat = pose.upsideDown ? -1 : 1
-            let toHip = (hindRoot - paw).normalized
+            let root = upright(hindRoot, over: paw)
+            let toHip = (root - paw).normalized
             let lean = 0.5 * flip
             let foot = CGVector(dx: toHip.dx * cos(lean) - toHip.dy * sin(lean), dy: toHip.dx * sin(lean) + toHip.dy * cos(lean))
             let hock = paw + foot * hindLengths.2
-            let knee = solveJoint(root: hindRoot, target: hock, upper: hindLengths.0, lower: hindLengths.1, bend: flip)
-            return limb([hindRoot, knee, hock, paw], widths: [6, 4.6, 3.5, 3.3]) + [pawPath(paw, tilt: pawTilt(paw))]
+            let knee = solveJoint(root: root, target: hock, upper: hindLengths.0, lower: hindLengths.1, bend: flip)
+            let joints = [root, straightened(knee, from: root, to: paw), straightened(hock, from: root, to: paw), paw]
+            return limb(joints, widths: [6, 4.6, 3.5, 3.3]) + [pawPath(paw, tilt: pawTilt(paw))]
         }
+
+        /// Facing the viewer, a leg hangs straight down to its paw...
+        private func upright(_ root: CGPoint, over paw: CGPoint) -> CGPoint {
+            CGPoint(x: root.x + (paw.x - root.x) * frontal, y: root.y)
+        }
+
+        /// ...and its knees and elbows bend toward the viewer, out of sight, so they're drawn
+        /// on the straight line from root to paw.
+        private func straightened(_ joint: CGPoint, from root: CGPoint, to paw: CGPoint) -> CGPoint {
+            guard frontal > 0, abs(paw.y - root.y) > 0.01 else { return joint }
+            let t = min(1, max(0, (joint.y - root.y) / (paw.y - root.y)))
+            let lineX = root.x + (paw.x - root.x) * t
+            return CGPoint(x: lineX + (joint.x - lineX) * (1 - frontal), y: joint.y)
+        }
+
+        private var frontal: CGFloat { min(1, max(0, pose.frontal)) }
 
         /// Lifted paws point their toes down.
         private func pawTilt(_ paw: CGPoint) -> CGFloat {
@@ -411,8 +436,12 @@ enum AnimeCatFactory {
             return -0.45 * min(1, max(0, paw.y - ground - 0.3) / 2.5)
         }
 
+        /// How much darker the far legs are: they're in shadow from the side, but side by side
+        /// with the near ones when the cat faces the viewer.
+        private var farShade: CGFloat { 1 - frontal }
+
         func legPart(_ paths: [CGPath], paws: [CGPoint], color: CGColor, near: Bool, colors: Colors) -> Part {
-            let sock = colors.sock.map { near ? $0 : (NSColor(cgColor: $0)?.blended(withFraction: 0.15, of: NSColor(cgColor: colors.line) ?? .black)?.cgColor ?? $0) }
+            let sock = colors.sock.map { near ? $0 : (NSColor(cgColor: $0)?.blended(withFraction: 0.15 * farShade, of: NSColor(cgColor: colors.line) ?? .black)?.cgColor ?? $0) }
             return Part(paths: paths, color: color, shadeShift: 1.1) { context in
                 if let sock {
                     context.setFillColor(sock)
@@ -437,7 +466,11 @@ enum AnimeCatFactory {
                 paths += frontLeg(to: pose.frontFar)
                 paws.append(pose.frontFar)
             }
-            return [legPart(paths, paws: paws, color: colors.far, near: false, colors: colors)]
+            var color = colors.far
+            if farShade < 1, let far = NSColor(cgColor: colors.far), let fur = NSColor(cgColor: colors.fur) {
+                color = far.blended(withFraction: 1 - farShade, of: fur)?.cgColor ?? color
+            }
+            return [legPart(paths, paws: paws, color: color, near: false, colors: colors)]
         }
 
         func nearParts(_ colors: Colors) -> [Part] {
@@ -448,10 +481,11 @@ enum AnimeCatFactory {
                     if let patches = colors.patches { backPatch(patches, in: context) }
                 },
                 Part(paths: [neck], color: colors.fur, shadeShift: 0),
-                Part(paths: [chestFluff(colors.fluff)], color: colors.belly, shadeShift: 0.8),
                 Part(paths: [haunch], color: colors.fur, shadeShift: 1.8, highlight: true) { context in
                     if let stripes = colors.stripes { haunchStripes(stripes, in: context) }
                 },
+                // After the haunch: the two meet when the cat faces the viewer, chest in front.
+                Part(paths: [chestFluff(colors.fluff)], color: colors.belly, shadeShift: 0.8),
             ]
             if pose.hindFolded && !pose.scratching {
                 parts.append(legPart([pawPath(pose.backNear)], paws: [pose.backNear], color: colors.fur, near: true, colors: colors))
@@ -484,10 +518,9 @@ enum AnimeCatFactory {
         }
 
         private func belly(_ colors: Colors, in context: CGContext) {
-            let angle = atan2(axis.dy, axis.dx)
             let spots: [(center: CGPoint, size: CGSize)] = [
-                (pose.shoulder - normal * 4.2 - axis * 3, CGSize(width: 18, height: 7)),
-                (pose.shoulder + axis * 3.6 - normal * 0.6, CGSize(width: 7, height: 11)),
+                (pose.shoulder - normal * 4.2 - along * 3, CGSize(width: 18, height: 7)),
+                (pose.shoulder + along * 3.6 - normal * 0.6, CGSize(width: 7, height: 11)),
             ]
             context.setFillColor(colors.belly)
             for spot in spots {
@@ -505,7 +538,7 @@ enum AnimeCatFactory {
                 let radius = rumpRadius + (chestRadius - rumpRadius) * t
                 let top = spine + normal * (radius + pose.arch * 0.7)
                 context.move(to: top + normal * 1)
-                context.addQuadCurve(to: top - normal * 5.5 - axis * 1.2, control: top - normal * 2 + axis * 1)
+                context.addQuadCurve(to: top - normal * 5.5 - along * 1.2, control: top - normal * 2 + along * 1)
                 context.strokePath()
             }
         }
@@ -513,20 +546,20 @@ enum AnimeCatFactory {
         /// A soft saddle of color over the rump.
         private func backPatch(_ color: CGColor, in context: CGContext) {
             let center = pose.hip + (pose.shoulder - pose.hip) * 0.3 + normal * (rumpRadius - 0.5)
-            var transform = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: atan2(axis.dy, axis.dx) + 0.15)
+            var transform = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: angle + 0.15 * (1 - min(1, max(0, pose.frontal))))
             context.addPath(CGPath(ellipseIn: CGRect(x: -6.5, y: -3.6, width: 13, height: 7.2), transform: &transform))
             context.setFillColor(color)
             context.fillPath()
         }
 
         private func haunchStripes(_ color: CGColor, in context: CGContext) {
-            let center = pose.hip + axis * 1.2 - normal * 0.6
+            let center = pose.hip + along * 1.2 - normal * 0.6
             context.setStrokeColor(color)
             context.setLineWidth(1.4)
             for offset in [-2.5, 0.5] as [CGFloat] {
-                let start = center + axis * offset + normal * 7.5
+                let start = center + along * offset + normal * 7.5
                 context.move(to: start)
-                context.addQuadCurve(to: start - normal * 5 - axis * 2.5, control: start - normal * 3 + axis * 1.2)
+                context.addQuadCurve(to: start - normal * 5 - along * 2.5, control: start - normal * 3 + along * 1.2)
                 context.strokePath()
             }
         }
@@ -702,7 +735,7 @@ enum AnimeCatFactory {
         )
     }
 
-    private static func drawHead(_ pose: RigPose, colors: Colors, in context: CGContext) {
+    private static func drawHead(_ pose: RigPose, colors: Colors, markingSide: CGFloat, in context: CGContext) {
         context.saveGState()
         defer { context.restoreGState() }
         context.translateBy(x: pose.head.x, y: pose.head.y)
@@ -712,20 +745,22 @@ enum AnimeCatFactory {
         context.setLineWidth(line / headScale)
 
         let fluff = colors.fluff
+        // The back cheek's ruff is fuller, until the cat faces the viewer and both cheeks show.
+        let front = min(1, max(0, pose.frontal))
         let skull = furryEllipse(CGRect(x: -8.3, y: -7.3, width: 16.6, height: 13.9), tufts: [
-            Tuft(from: 188, to: 252, count: fluff > 1.3 ? 4 : 3, depth: 1.5 * fluff, sweep: 0.5),
-            Tuft(from: 300, to: 350, count: fluff > 1.3 ? 3 : 2, depth: 0.9 * fluff, sweep: -0.5),
+            Tuft(from: 188, to: 252, count: fluff > 1.3 ? 4 : 3, depth: (1.5 - 0.3 * front) * fluff, sweep: 0.5),
+            Tuft(from: 300, to: 350, count: fluff > 1.3 ? 3 : 2, depth: (0.9 + 0.3 * front) * fluff, sweep: -0.5),
             Tuft(from: 92, to: 112, count: 2, depth: 1.2, sweep: 0.5),
         ])
 
         let ears = [ear(side: -1, pose: pose), ear(side: 1, pose: pose)]
         let parts = ears.map { ear in
-            Part(paths: [ear.outer], color: earColor(side: ear.side, colors: colors), shadeShift: 0) { context in
+            Part(paths: [ear.outer], color: earColor(side: ear.side, markingSide: markingSide, colors: colors), shadeShift: 0) { context in
                 drawInnerEar(ear, colors: colors, in: context)
             }
         } + [
             Part(paths: [skull], color: colors.fur, shadeShift: 0.6, highlight: true) { context in
-                drawFaceMarkings(colors, in: context)
+                drawFaceMarkings(colors, mid: faceCenter(pose), side: markingSide, in: context)
             },
         ]
         drawGroup(parts, colors: colors, in: context, lineWidth: line / headScale)
@@ -733,16 +768,15 @@ enum AnimeCatFactory {
         drawFace(pose, colors: colors, in: context)
     }
 
-    private static func earColor(side: CGFloat, colors: Colors) -> CGColor {
+    private static func earColor(side: CGFloat, markingSide: CGFloat, colors: Colors) -> CGColor {
         if let points = colors.points { return points }
-        if side < 0, let patches = colors.patches { return patches }
+        if side == markingSide, let patches = colors.patches { return patches }
         return colors.fur
     }
 
     /// Markings painted onto the skull, inside its outline: the cream muzzle, tabby stripes,
-    /// a colorpoint mask, or a soft crown patch.
-    private static func drawFaceMarkings(_ colors: Colors, in context: CGContext) {
-        let mid = faceCenter
+    /// a colorpoint mask, or a soft crown patch. One-sided markings go on `side` (-1 or 1).
+    private static func drawFaceMarkings(_ colors: Colors, mid: CGFloat, side: CGFloat, in context: CGContext) {
         if let points = colors.points, let gradient = CGGradient(
             colorsSpace: CGColorSpaceCreateDeviceRGB(),
             colors: [points.copy(alpha: 0.7) ?? points, points.copy(alpha: 0) ?? points] as CFArray,
@@ -756,30 +790,31 @@ enum AnimeCatFactory {
         }
         if let patches = colors.patches {
             context.saveGState()
-            context.translateBy(x: -3.6, y: 4.6)
-            context.rotate(by: 0.35)
+            context.translateBy(x: 3.6 * side, y: 4.6)
+            context.rotate(by: -0.35 * side)
             context.setFillColor(patches)
             context.fillEllipse(in: CGRect(x: -4.6, y: -2.6, width: 9.2, height: 5.6))
             context.restoreGState()
         }
 
         context.setFillColor(colors.belly)
-        for side in [-1, 1] as [CGFloat] {
-            context.fillEllipse(in: CGRect(x: mid + side * 1.25 - 2.15, y: -6.4, width: 4.3, height: 3.2))
+        for puff in [-1, 1] as [CGFloat] {
+            context.fillEllipse(in: CGRect(x: mid + puff * 1.25 - 2.15, y: -6.4, width: 4.3, height: 3.2))
         }
         context.fillEllipse(in: CGRect(x: mid - 1.6, y: -7.2, width: 3.2, height: 2))
 
         guard let stripes = colors.stripes else { return }
         context.setStrokeColor(stripes)
         context.setLineWidth(0.7)
-        for (top, bottom) in [((-1.8, 6.6), (-1.4, 4.9)), ((0.1, 6.9), (0.2, 5.2)), ((2, 6.6), (1.8, 4.9))] {
-            context.move(to: CGPoint(x: top.0, y: top.1))
-            context.addLine(to: CGPoint(x: bottom.0, y: bottom.1))
+        let flip = -side
+        for (top, bottom) in [((-1.8, 6.6), (-1.4, 4.9)), ((0.1, 6.9), (0.2, 5.2)), ((2, 6.6), (1.8, 4.9))] as [((CGFloat, CGFloat), (CGFloat, CGFloat))] {
+            context.move(to: CGPoint(x: top.0 * flip, y: top.1))
+            context.addLine(to: CGPoint(x: bottom.0 * flip, y: bottom.1))
             context.strokePath()
         }
         for y in [-1.4, -2.8] as [CGFloat] {
-            context.move(to: CGPoint(x: -8.4, y: y))
-            context.addLine(to: CGPoint(x: -6.6, y: y - 0.3))
+            context.move(to: CGPoint(x: 8.4 * side, y: y))
+            context.addLine(to: CGPoint(x: 6.6 * side, y: y - 0.3))
             context.strokePath()
         }
     }
@@ -795,7 +830,7 @@ enum AnimeCatFactory {
     private static func ear(side: CGFloat, pose: RigPose) -> Ear {
         let spread = pose.earSpread + (side > 0 ? pose.earTwitchRight : pose.earTwitchLeft)
         let flatten = 1 - 0.3 * min(1, max(0, spread) / 40)
-        let pivot = CGPoint(x: faceCenter + side * 4.6, y: 4.4)
+        let pivot = CGPoint(x: faceCenter(pose) + side * 4.6, y: 4.4)
         let swing = -spread * .pi / 180, fold = pose.earTilt * .pi / 180
         // Drawn upright with +x pointing away from the face, then swung, mirrored, and folded back.
         func place(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
@@ -885,7 +920,7 @@ enum AnimeCatFactory {
 
     private static func drawFace(_ pose: RigPose, colors: Colors, in context: CGContext) {
         // The face is mirrored about the nose's vertical line.
-        let mid: CGFloat = faceCenter
+        let mid = faceCenter(pose)
         let eyeSize = CGSize(width: 4.9, height: 5.6)
         for side in [-1, 1] as [CGFloat] {
             let center = CGPoint(x: mid + side * 3.3, y: -0.6)
@@ -987,8 +1022,11 @@ enum AnimeCatFactory {
         context.strokePath()
     }
 
-    /// The x of the nose and mouth, which the eyes, blush, and whiskers mirror around.
-    private static let faceCenter: CGFloat = 0.9
+    /// The x of the nose and mouth, which the eyes, blush, and whiskers mirror around: a little
+    /// toward the way the cat faces, or dead center when it faces the viewer.
+    private static func faceCenter(_ pose: RigPose) -> CGFloat {
+        0.9 * (1 - min(1, max(0, pose.frontal)))
+    }
 
     /// Big glossy anime cat eyes: almond-shaped and tilted up at the outer corner, a layered iris
     /// (dark top under the lid's shadow, a glowing lower half, a dark rim), a cat pupil that rounds

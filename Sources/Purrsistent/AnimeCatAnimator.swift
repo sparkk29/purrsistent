@@ -90,8 +90,6 @@ final class AnimeCatAnimator {
     private(set) var particles: [AnimeParticle] = []
     /// Drawn facing left.
     private(set) var mirrored = false
-    /// Below 1 while turning around: the cat squeezes sideways and flips at the narrowest point.
-    private(set) var turnScale: CGFloat = 1
 
     // MARK: State
 
@@ -160,7 +158,9 @@ final class AnimeCatAnimator {
 
     private var shownFacing: Facing = .right
     private var turnElapsed: TimeInterval = .infinity
-    private static let turnDuration: TimeInterval = 0.16
+    /// 0 to 1: how far round toward the viewer the cat is while turning around.
+    private var turnAmount: CGFloat = 0
+    static let turnDuration: TimeInterval = 0.6
 
     init(random: @escaping () -> Double = { Double.random(in: 0..<1) }) {
         self.random = random
@@ -187,6 +187,7 @@ final class AnimeCatAnimator {
         shownFacing = facing
         mirrored = facing == .left
         turnElapsed = .infinity
+        turnAmount = 0
         nextBlink = time + between(1, 3)
         nextParticle = time + 0.6
     }
@@ -273,6 +274,9 @@ final class AnimeCatAnimator {
             base = target
         }
 
+        // First, so that if the drawing flips this frame the springs below already know.
+        updateTurn(dt: dt)
+
         var pose = base
         var earExtra = (left: CGFloat(0), right: CGFloat(0))
         applyDrowsiness(&pose, dt: dt)
@@ -285,8 +289,8 @@ final class AnimeCatAnimator {
         applyTail(&pose, dt: dt)
         applyTalking(&pose, dt: dt)
         if reduceMotion && !Self.isAirborne(motion) { pose.lift *= 0.3 }
+        applyTurn(&pose)
         updateParticles(pose, dt: dt)
-        updateTurn(dt: dt)
         self.pose = pose
         return pose
     }
@@ -635,6 +639,8 @@ final class AnimeCatAnimator {
 
     // MARK: - Turning
 
+    /// Turning around swings the cat round through facing the viewer. It is drawn mirrored from
+    /// the halfway point, where it faces straight out and looks the same either way.
     private func updateTurn(dt: TimeInterval) {
         if facing != shownFacing, turnElapsed >= Self.turnDuration {
             turnElapsed = reduceMotion ? Self.turnDuration : 0
@@ -643,12 +649,69 @@ final class AnimeCatAnimator {
         if turnElapsed < Self.turnDuration {
             turnElapsed += dt
             let t = CGFloat(min(1, turnElapsed / Self.turnDuration))
-            if t >= 0.5 { shownFacing = facing }
-            turnScale = 0.55 + 0.45 * smooth(abs(1 - 2 * t))
+            if t >= 0.5, shownFacing != facing {
+                shownFacing = facing
+                mirrorSprings()
+            }
+            // Lingers facing out for a moment around the halfway point.
+            turnAmount = smooth(min(1, (1 - abs(1 - 2 * t)) * 1.2))
         } else {
-            turnScale = 1
+            turnAmount = 0
         }
         mirrored = shownFacing == .left
+    }
+
+    /// When the drawing flips, the springy parts flip with it so they carry on from exactly where
+    /// they were on screen, then swing over to their places on the other side: the tail sweeps
+    /// across behind (or, wrapped round the paws, in front), and each ear keeps its own twitch.
+    private func mirrorSprings() {
+        func mirror(_ spring: inout Spring) {
+            spring.value.negate()
+            spring.velocity.negate()
+        }
+        mirror(&tail1.x)
+        mirror(&tail2.x)
+        mirror(&tailTip.x)
+        swap(&earLeft, &earRight)
+    }
+
+    /// Foreshortens the side-on pose toward facing the viewer: the body shortens to a round
+    /// end-on view over the middle of the canvas (the axis the drawing mirrors about), the paws
+    /// gather under it in two columns, the head comes round over the chest looking straight
+    /// out, and the tail swings in behind.
+    private func applyTurn(_ pose: inout Pose) {
+        let u = turnAmount
+        guard u > 0.001 else { return }
+        let middle = AnimeCatFactory.canvas / 2
+        let center = CGPoint(x: (pose.hip.x + pose.shoulder.x) / 2, y: (pose.hip.y + pose.shoulder.y) / 2)
+        let anchor = center.x + (middle - center.x) * u
+        // Kept a hair apart so the spine's direction stays put.
+        let spine = 1 - 0.98 * u
+        pose.hip = CGPoint(x: anchor + (pose.hip.x - center.x) * spine, y: center.y + (pose.hip.y - center.y) * spine)
+        pose.shoulder = CGPoint(x: anchor + (pose.shoulder.x - center.x) * spine, y: center.y + (pose.shoulder.y - center.y) * spine)
+        pose.head.x = anchor + (pose.head.x - center.x) * (1 - u)
+
+        let column: CGFloat = 3.4
+        func gather(_ paw: inout CGPoint, near: Bool) {
+            paw.x = anchor + (paw.x - center.x) * (1 - u) + (near ? column : -column) * u
+        }
+        gather(&pose.frontNear, near: true)
+        gather(&pose.backNear, near: true)
+        gather(&pose.frontFar, near: false)
+        gather(&pose.backFar, near: false)
+
+        // A tail held out behind swings in behind the body; one wrapped round the paws stays
+        // wrapped and sweeps across the front after the flip.
+        if !pose.tailInFront {
+            let tailSpread = 1 - 0.9 * u
+            pose.tail1.dx *= tailSpread
+            pose.tail2.dx *= tailSpread
+            pose.tailTip.dx *= tailSpread
+        }
+
+        pose.headTilt *= 1 - u
+        pose.look.dx *= 1 - u
+        pose.frontal = max(pose.frontal, u)
     }
 
     // MARK: - Helpers

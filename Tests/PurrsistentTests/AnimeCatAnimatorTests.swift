@@ -246,22 +246,53 @@ private func jump(_ a: Pose, _ b: Pose) -> CGFloat {
         #expect(animator.pose.mouthOpen < 0.05)
     }
 
-    @Test func turningAroundSqueezesInsteadOfSnapping() {
+    @Test(arguments: [AnimeMotion.idle, .walk, .sit])
+    func turningAroundSwingsThroughFacingTheViewer(motion: AnimeMotion) {
         let animator = AnimeCatAnimator(random: seeded())
-        animator.start(.idle)
-        run(animator, for: 0.1)
+        animator.start(motion)
+        run(animator, for: 0.5)
         #expect(!animator.mirrored)
-        animator.facing = .left
-        var narrowest: CGFloat = 1
-        var flippedWhileWide = false
-        run(animator, for: 0.3) { _ in
-            narrowest = min(narrowest, animator.turnScale)
-            if animator.mirrored && animator.turnScale > 0.95 && narrowest > 0.7 { flippedWhileWide = true }
+
+        /// Where things appear on screen, after the drawing's mirroring.
+        func onScreen(_ pose: Pose) -> [CGPoint] {
+            func x(_ value: CGFloat) -> CGFloat { animator.mirrored ? AnimeCatFactory.canvas - value : value }
+            let paws: [CGFloat] = [pose.frontNear.x, pose.frontFar.x, pose.backNear.x, pose.backFar.x].map(x).sorted()
+            let body = CGPoint(x: (pose.hip.x + pose.shoulder.x) / 2, y: (pose.hip.y + pose.shoulder.y) / 2)
+            let tailTip = CGPoint(x: pose.hip.x + pose.tailTip.dx, y: pose.hip.y + pose.tailTip.dy)
+            let joints: [CGPoint] = [pose.head, body, tailTip].map { CGPoint(x: x($0.x), y: $0.y) }
+            return joints + paws.map { CGPoint(x: $0, y: 0) }
         }
-        #expect(narrowest < 0.7)
-        #expect(!flippedWhileWide, "the flip happens at the narrowest point")
+
+        animator.facing = .left
+        var previous = onScreen(animator.pose)
+        var wasMirrored = animator.mirrored
+        var fastestBody: CGFloat = 0
+        var fastestTail: CGFloat = 0
+        var atFlip: CGFloat = 0
+        var mostFrontal: CGFloat = 0
+        var flippedBeforeFacingOut = false
+        run(animator, for: AnimeCatAnimator.turnDuration + 0.2) { pose in
+            let now = onScreen(pose)
+            var jumps = zip(previous, now).map { distance($0, $1) }
+            let tail = jumps.remove(at: 2)
+            if animator.mirrored != wasMirrored {
+                atFlip = max(tail, jumps.max() ?? 0)
+            } else {
+                fastestBody = max(fastestBody, jumps.max() ?? 0)
+                fastestTail = max(fastestTail, tail)
+            }
+            previous = now
+            wasMirrored = animator.mirrored
+            mostFrontal = max(mostFrontal, pose.frontal)
+            if animator.mirrored && mostFrontal < 0.99 { flippedBeforeFacingOut = true }
+        }
+        #expect(mostFrontal > 0.99, "faces the viewer halfway round")
+        #expect(!flippedBeforeFacingOut, "the drawing only flips while the cat faces straight out")
+        #expect(atFlip < 0.5, "\(motion): the flip itself shows, moving something \(atFlip) units")
+        #expect(fastestBody < 2, "\(motion): the body moves \(fastestBody) units in one frame while turning")
+        #expect(fastestTail < 3.5, "\(motion): the tail whips \(fastestTail) units in one frame while turning")
         #expect(animator.mirrored)
-        #expect(animator.turnScale == 1)
+        #expect(animator.pose.frontal < 0.01)
     }
 
     @Test func tailStaysAttachedThroughBusyTransitions() {
