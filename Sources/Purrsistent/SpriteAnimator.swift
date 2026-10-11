@@ -36,9 +36,14 @@ enum AnimationKey: String, CaseIterable {
 }
 
 extension PetState {
+    /// Frame-based styles and custom sprites reuse the closest existing animation for the
+    /// reactions only the anime cat animates on its own.
     var animationKey: AnimationKey {
         switch self {
-        case .idle: .idle
+        case .idle, .curious: .idle
+        case .waking: .yawn
+        case .startled: .fall
+        case .annoyed: .sit
         case .walkLeft, .walkRight: .walk
         case .sit: .sit
         case .sleep: .sleep
@@ -86,11 +91,10 @@ final class SpriteAnimator {
     func load(coat: Coat, style: ArtStyle) {
         guard loaded?.coat != coat || loaded?.style != style else { return }
         loaded = (coat, style)
-        let palette = SpriteFactory.Palette.forCoat(coat)
         let builtInStyle: ArtStyle = coat == .custom ? .cartoon : style
         for key in AnimationKey.allCases {
             let custom = coat == .custom ? Self.loadFrames(for: key, from: spriteDirectories) : nil
-            let images = custom ?? SpriteFactory.frames(for: key, palette: palette, style: builtInStyle)
+            let images = custom ?? SpriteFactory.frames(for: key, coat: coat, style: builtInStyle)
             frames[key] = images
             mirroredFrames[key] = images.map(Self.mirrored)
             framesPerSecond[key] = custom == nil ? SpriteFactory.framesPerSecond(for: key, style: builtInStyle) : key.framesPerSecond

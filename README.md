@@ -11,7 +11,7 @@
 Purrsistent is a native macOS desktop pet. A small animated cat strolls along the top of your Dock, naps, grooms, meows, and reacts when you stroke it, poke it, or toss it across the screen. It lives in a transparent, always-on-top window, so it stays out of your way: clicks on the empty space around it go straight through to the apps underneath.
 
 <p align="center">
-  <img src="assets/coats.png" alt="Orange, Midnight, Silver, and Snowball coats" width="480">
+  <img src="assets/anime-coats.png" alt="The anime kitten in Orange, Midnight, Silver, Snowball, and Cream coats" width="720">
 </p>
 
 <p align="center">
@@ -21,15 +21,15 @@ Purrsistent is a native macOS desktop pet. A small animated cat strolls along th
 ## Features
 
 - **Lives on your desktop**: walks along the top of the Dock (or the bottom of the screen), wanders across to your other monitors, and shows up on every Space and over full-screen apps.
-- **Has a mind of its own**: idles, sits, grooms, yawns, scratches an itch, and wanders at random. It loafs when it's bored, dozes off after about 2 minutes without attention (sooner late at night), and wakes up with a big stretch.
+- **Has a mind of its own**: idles, sits, grooms, yawns, scratches an itch, and wanders at random. It loafs when it's bored, gets visibly drowsy and dozes off after about 2 minutes without attention (sooner late at night), and wakes up slowly, often with a big stretch and a wash.
 - **Plays**: a happy cat kneads, rolls onto its back, and chases its own tail.
-- **Notices you**: turns to look at your cursor when it's nearby, and sometimes crouches, wiggles, and pounces at it.
-- **Loves attention**: stroke it with the cursor and it closes its eyes and purrs. Click it for a happy hop and a meow.
-- **Throwable**: drag it and fling it. It flies, bounces off screen edges, and skids to a stop.
-- **Treats and mood**: give it a fish treat and it trots over to eat it. Its mood rises with attention and slowly fades when it's ignored, and a happier cat plays more.
-- **Break reminders**: optionally reminds you to stretch, drink water, or rest your eyes, in a little speech bubble.
-- **Coats**: Orange, Midnight, Silver, and Snowball, or your own artwork.
-- **Styles**: Cartoon, Pixel (chunky 32×32 pixel art), Silhouette (a dark shape with glowing eyes), and Anime (a fluffy kitten with big glossy eyes, cheek tufts, and cel shading). Any style works with any coat.
+- **Notices you**: its eyes follow your cursor when it's nearby, with the head turning a beat later, and it sometimes crouches, wiggles, and pounces at it. Hover over it and its ears perk up. Come back to your Mac after a few minutes away and it looks up to greet you, or wakes up if it was asleep.
+- **Loves attention**: stroke it with the cursor and it closes its eyes and purrs. Click it for a happy hop and a meow, but poke it over and over and it gets annoyed. Poke it while it's asleep and it startles awake.
+- **Throwable**: drag it and fling it. It flies, bounces off screen edges, and skids to a stop. A hard landing gives it a fright.
+- **Treats and mood**: give it a fish treat and it looks up, then trots over to eat it. Its mood rises with attention and slowly fades when it's ignored, and a happier cat plays more.
+- **Break reminders**: optionally reminds you to stretch, drink water, or rest your eyes. The cat looks up (waking first if it was asleep), meows, and its mouth moves as the speech bubble appears.
+- **Coats**: Orange (tabby), Midnight (black with pink ears), Silver (grey tabby with blue eyes), Snowball (white with soft grey patches), and Cream (fluffy cream with grey points and blue eyes), or your own artwork.
+- **Styles**: Anime (the default: a fluffy chibi kitten with big glossy eyes, cheek tufts, and cel shading, animated live), Cartoon, Pixel (chunky 32×32 pixel art), and Silhouette (a dark shape with glowing eyes). Any style works with any coat.
 - **Sounds**: real cat recordings for meows, a surprised chirp, and a soft purr, plus a thud on landing. Pick a voice: Classic, Kitten, or Tomcat.
 - **Stays out of the way**: no Dock icon, and clicks on transparent pixels pass through.
 - **Menu bar controls**: everything is in the paw icon in the menu bar, or right-click the cat.
@@ -58,9 +58,12 @@ swift run
 
 | Action | What happens |
 | --- | --- |
+| Move the cursor near the cat | It watches the cursor; hovering over it perks its ears |
 | Move the cursor back and forth over the cat | It purrs and its mood goes up |
 | Click the cat | Happy hop and a meow |
-| Drag and release (or fling) the cat | It flies, bounces off edges, and lands with a thud |
+| Click it four times in a few seconds | It gets annoyed: flattened ears, a sulky look, a flicking tail |
+| Click it while it's asleep | It startles awake |
+| Drag and release (or fling) the cat | It flies, bounces off edges, and lands with a thud (a hard landing startles it) |
 | Right-click (or Control-click) the cat | Opens the menu |
 | Click a speech bubble | Dismisses it |
 | Leave it alone for ~2 minutes | It falls asleep and purrs (after ~45 seconds at night) |
@@ -70,7 +73,7 @@ The menu bar icon and the right-click menu offer the same options:
 - **Show / Hide Pet**
 - **Mood**: how the cat is feeling: Grumpy, Bored, Content, or Happy
 - **Give Treat**: drops a fish for the cat to find and eat
-- **Coat**: Orange, Midnight, Silver, Snowball, plus Custom when you've added your own sprites
+- **Coat**: Orange, Midnight, Silver, Snowball, Cream, plus Custom when you've added your own sprites
 - **Style**: Cartoon, Pixel, Silhouette, Anime (not available with the Custom coat)
 - **Size**: Small, Medium, Large
 - **Speed**: Slow, Normal, Fast
@@ -79,10 +82,27 @@ The menu bar icon and the right-click menu offer the same options:
 - **Voice**: Classic (a steady adult cat), Kitten (high, squeaky mews), Tomcat (a talkative tom), plus Custom when you've added your own sounds. Picking one plays a sample meow.
 - **Volume**: Low, Medium, High
 - **Break Reminders**: Off, or every 25, 45, or 60 minutes
-- **Launch at Login**: only works from the bundled `.app`
+- **Launch at Login**: only works from the bundled `.app`. If macOS refuses, the cat gives you a puzzled look along with the error.
 - **Quit**
 
 Settings and mood are saved between launches.
+
+## The anime cat
+
+<p align="center">
+  <img src="assets/anime-states.png" alt="The anime kitten idle, curious, happy, petted, asleep, waking, stretching, grooming, startled, annoyed, yawning, loafing, walking, kneading, rolling over, and pouncing" width="640">
+</p>
+
+In the Anime style the cat isn't a flipbook: it's a jointed vector rig (hips, shoulders, two-segment legs, a curved tail, a big head with layered eyes) that is drawn fresh as it moves.
+
+- **Behaviors** are keyframed poses. The cat eases from wherever it is into each new one instead of cutting, and big changes of pose take longer, so nothing snaps.
+- **Life on top**: it breathes, blinks at irregular intervals with real eyelids (sometimes twice, slowly and lopsidedly when sleepy), and its ears and tail hang on springs, so they twitch, sway, and follow through on hops and landings.
+- **Faces and particles**: wide eyes when surprised, a sulk when annoyed, a little "?" when something goes wrong, Zs while it sleeps, and hearts when it's happy or being stroked.
+- **States**: idle, walking, sitting, loafing, getting drowsy, sleeping, waking, stretching, yawning, grooming, scratching, happy, petted, kneading, rolling over, tail chasing, curious, pouncing, eating, startled, annoyed, being carried, falling, and leaping.
+- **Reduce Motion**: with **System Settings → Accessibility → Display → Reduce motion** on, hops and tail swishes are toned down and there are no hearts. It follows the setting live.
+- **Light on your Mac**: it only redraws when something visibly changes, animates its sleep at a lower frame rate, and stops drawing entirely while its window is hidden or covered.
+
+The other styles still use pre-drawn frames. With Custom sprites, the newer states reuse the closest animation you provided (waking uses `yawn`, curious uses `idle`, startled uses `fall`, annoyed uses `sit`).
 
 ## Custom artwork and sounds
 
@@ -125,7 +145,16 @@ After changing assets, run `./scripts/bundle.sh` again.
 swift build
 .build/debug/Purrsistent --export-sounds SynthesizedSounds   # synthesized fallback sounds, for reference
 .build/debug/Purrsistent --export-logo assets/logo.png
+.build/debug/Purrsistent --export-anime-preview AnimePreview  # coat and state sheets, plus transition and blink strips
 ```
+
+## Tests
+
+```bash
+./scripts/test.sh
+```
+
+The tests cover the behavior state machine (priorities, cooldowns, waking, startles) and the anime animation (that clips loop and blend without jumps, blinks use the eyelids, the gaze follows its target, Reduce Motion is respected, and unchanged frames aren't redrawn). The script passes `swift test` the extra flags it needs to find Swift Testing when only the Command Line Tools are installed; with Xcode, plain `swift test` works too.
 
 ## Project structure
 
@@ -134,9 +163,10 @@ Sources/Purrsistent/
   main.swift               App entry point and asset-export commands
   AppDelegate.swift        Wires up the pet and the menu bar
   PetWindow.swift          Transparent, always-on-top panel
-  PetView.swift            Draws the current frame, mouse handling, pixel hit-testing
-  PetController.swift      30 fps loop: movement, throwing, petting, treats, sound cues
-  PetStateMachine.swift    Behaviors and weighted random transitions
+  PetView.swift            Shows the current frame, mouse handling, pixel hit-testing
+  PetController.swift      30 fps loop: movement, throwing, petting, treats, sound cues, and
+                           feeding app events (cursor, clicks, speech, your return) to the cat
+  PetStateMachine.swift    Behaviors with priorities, cooldowns, and weighted random transitions
   Mood.swift               Persisted mood that fades over time
   Treat.swift              The fish treat
   BubbleWindow.swift       Speech bubble above the pet
@@ -144,7 +174,12 @@ Sources/Purrsistent/
   SpriteAnimator.swift     Loads, mirrors, and steps through animation frames
   SpriteFactory.swift      Draws the built-in cat, its coats and styles, and the treat
   PixelArt.swift           Turns a vector drawing into pixel art
-  AnimeCatFactory.swift    Rigged anime kitten: jointed legs, keyframed poses, fur tufts, cel shading
+  CatAppearance.swift      Data-driven coats for the anime cat: colors, markings, eyes, fluffiness
+  AnimeCatFactory.swift    Draws one pose of the rigged anime kitten: legs, fur tufts, eyes, cel shading
+  AnimeCatClips.swift      Keyframed poses for every behavior
+  AnimeCatAnimator.swift   Live animation: blending, breathing, blinks, gaze, springy ears and tail
+  AnimeCatRenderer.swift   Rasterizes the live cat, skipping frames that wouldn't change
+  AnimePreview.swift       Exports preview sheets of the anime cat
   SoundPlayer.swift        Loads and plays sound effects and loops
   SoundFactory.swift       Synthesizes fallback sounds
   IconFactory.swift        Draws the app icon and logo
@@ -153,7 +188,9 @@ Sources/Purrsistent/
 Resources/
   Sprites/                 Optional custom animation frames
   Sounds/                  Shared purr and thud, plus one folder of meows and chirps per voice
+Tests/PurrsistentTests/    State machine, animation, and rendering tests
 scripts/bundle.sh          Builds Purrsistent.app
+scripts/test.sh            Runs the tests
 assets/                    Logo and images used in this README
 ```
 

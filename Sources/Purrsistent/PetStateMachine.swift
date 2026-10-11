@@ -3,9 +3,26 @@ import Foundation
 enum PetState: String {
     case idle, walkLeft, walkRight, sit, sleep, dragged, falling, happy, petted, yawn, groom, eating
     case stretch, scratch, knead, rollOver, loaf, pounceCrouch, leaping, tailChase
+    case waking, curious, startled, annoyed
 
     var isWalking: Bool { self == .walkLeft || self == .walkRight }
     var isAirborne: Bool { self == .dragged || self == .falling || self == .leaping }
+
+    /// Higher priorities can interrupt lower ones; ambient behaviors are the pet's own idea.
+    enum Priority: Int, Comparable {
+        case ambient, reaction, interaction, physics
+
+        static func < (a: Priority, b: Priority) -> Bool { a.rawValue < b.rawValue }
+    }
+
+    var priority: Priority {
+        switch self {
+        case .dragged, .falling, .leaping: .physics
+        case .petted, .eating, .pounceCrouch, .startled: .interaction
+        case .happy, .annoyed, .curious, .waking: .reaction
+        default: .ambient
+        }
+    }
 }
 
 @MainActor
@@ -14,6 +31,16 @@ final class PetStateMachine {
     private(set) var timeInState: TimeInterval = 0
     private var duration: TimeInterval = 2
     private var awakeIdleTime: TimeInterval = 0
+    private var clock: TimeInterval = 0
+    private var recentPokes: [TimeInterval] = []
+    private var lastCurious: TimeInterval = -.infinity
+
+    private static let pokeWindow: TimeInterval = 4
+    private static let pokesBeforeAnnoyed = 4
+    private static let curiousCooldown: TimeInterval = 6
+    private static let hardLandingSpeed: CGFloat = 1300
+    /// Seconds before falling asleep over which the pet gets visibly drowsy.
+    private static let drowsyWindow: TimeInterval = 25
 
     var onStateChange: ((_ old: PetState, _ new: PetState) -> Void)?
     /// Called when a state runs its full course, as opposed to being interrupted.
@@ -22,6 +49,12 @@ final class PetStateMachine {
     /// 0 (grumpy) to 1 (delighted); shifts the odds between lazing about and playing.
     var mood: Double = 0.7
 
+    /// Uniform in 0..<1. Replaceable so tests can make choices deterministic.
+    var random: () -> Double = { Double.random(in: 0..<1) }
+
+    /// Overrides the time of day for falling asleep sooner at night.
+    var isNight: () -> Bool = { PetStateMachine.isNightTime }
+
     var allowWalking = true {
         didSet {
             if !allowWalking && state.isWalking { transition(to: .idle) }
@@ -29,6 +62,7 @@ final class PetStateMachine {
     }
 
     func tick(_ dt: TimeInterval) {
+        clock += dt
         timeInState += dt
         switch state {
         case .dragged, .falling, .leaping, .petted:
@@ -45,13 +79,50 @@ final class PetStateMachine {
         }
     }
 
+    /// Seconds without attention before the pet dozes off.
+    var sleepAfter: TimeInterval { isNight() ? 45 : 120 }
+
+    /// 0 when wide awake, rising to 1 as the pet is about to fall asleep (and while asleep).
+    var drowsiness: Double {
+        if state == .sleep { return 1 }
+        guard state.priority == .ambient else { return 0 }
+        let start = sleepAfter - Self.drowsyWindow
+        return min(1, max(0, (awakeIdleTime - start) / Self.drowsyWindow))
+    }
+
     func noteInteraction() {
         awakeIdleTime = 0
     }
 
+    /// A click: a happy hop, a fright if it was asleep, or annoyance after too many in a row.
     func poke() {
         noteInteraction()
-        transition(to: .happy)
+        guard state.priority < .physics else { return }
+        recentPokes = recentPokes.filter { clock - $0 < Self.pokeWindow } + [clock]
+        if state == .sleep {
+            transition(to: .startled)
+        } else if recentPokes.count >= Self.pokesBeforeAnnoyed {
+            recentPokes.removeAll()
+            transition(to: .annoyed)
+        } else {
+            transition(to: .happy)
+        }
+    }
+
+    /// Something worth a look, like a treat dropping in or a message arriving. Only interrupts
+    /// the pet's own idle behaviors, and not too often.
+    func attend() {
+        guard state.priority == .ambient, state != .sleep,
+              clock - lastCurious >= Self.curiousCooldown else { return }
+        lastCurious = clock
+        transition(to: .curious)
+    }
+
+    /// Wakes up gradually, if asleep.
+    func wake() {
+        guard state == .sleep else { return }
+        noteInteraction()
+        transition(to: .waking)
     }
 
     func beginDrag() {
@@ -68,9 +139,10 @@ final class PetStateMachine {
         transition(to: .falling)
     }
 
-    func land() {
+    /// A hard landing gives the pet a fright before it recovers.
+    func land(impactSpeed: CGFloat = 0) {
         switch state {
-        case .falling: transition(to: .idle)
+        case .falling: transition(to: impactSpeed > Self.hardLandingSpeed ? .startled : .idle)
         case .leaping: transition(to: .happy)
         default: break
         }
@@ -78,7 +150,7 @@ final class PetStateMachine {
 
     var canBePetted: Bool {
         switch state {
-        case .dragged, .falling, .leaping, .petted, .eating: false
+        case .dragged, .falling, .leaping, .petted, .eating, .startled: false
         default: true
         }
     }
@@ -92,7 +164,7 @@ final class PetStateMachine {
 
     static func canPounce(from state: PetState) -> Bool {
         switch state {
-        case .idle, .sit, .walkLeft, .walkRight, .loaf: true
+        case .idle, .sit, .walkLeft, .walkRight, .loaf, .curious: true
         default: false
         }
     }
@@ -132,17 +204,32 @@ final class PetStateMachine {
     }
 
     private func chooseNext() -> PetState {
-        if state == .sleep {
+        switch state {
+        case .sleep:
             awakeIdleTime = 0
-            return Double.random(in: 0..<1) < 0.7 ? .stretch : .idle
-        }
-        if state == .pounceCrouch {
+            return .waking
+        case .pounceCrouch:
             return .leaping
+        case .waking:
+            return random() < 0.6 ? .stretch : .idle
+        default:
+            break
         }
 
-        let night = Self.isNightTime
-        if awakeIdleTime >= (night ? 45 : 120) {
+        let night = isNight()
+        if awakeIdleTime >= sleepAfter {
             return .sleep
+        }
+
+        switch state {
+        case .stretch where random() < 0.4:
+            return .groom
+        case .startled:
+            return .idle
+        case .curious, .annoyed:
+            return random() < 0.5 ? .sit : .idle
+        default:
+            break
         }
 
         var options: [(state: PetState, weight: Double)] = [
@@ -172,7 +259,7 @@ final class PetStateMachine {
 
     private func weightedPick(_ options: [(state: PetState, weight: Double)]) -> PetState {
         let total = options.reduce(0) { $0 + $1.weight }
-        var roll = Double.random(in: 0..<total)
+        var roll = random() * total
         for option in options {
             if roll < option.weight { return option.state }
             roll -= option.weight
@@ -203,6 +290,10 @@ final class PetStateMachine {
         case .loaf: .random(in: 8...20)
         case .pounceCrouch: 1
         case .tailChase: .random(in: 2...3)
+        case .waking: 1.8
+        case .curious: .random(in: 1.6...2.4)
+        case .startled: 1
+        case .annoyed: 1.8
         case .dragged, .falling, .leaping, .petted: .infinity
         }
     }

@@ -131,6 +131,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
                 try service.register()
             }
         } catch {
+            pet.showConfusion()
             let alert = NSAlert()
             alert.messageText = "Couldn't update Launch at Login"
             alert.informativeText = "\(error.localizedDescription)\n\nLaunch at Login only works when running the bundled Purrsistent.app."

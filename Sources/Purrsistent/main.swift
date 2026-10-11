@@ -25,7 +25,10 @@ func option(_ flag: String) -> String? {
 runExport(flag: "--export-sprites", defaultPath: "Resources/Sprites", label: "placeholder sprites") { url in
     let coat = option("--coat").flatMap(Coat.init(rawValue:)) ?? .orange
     let style = option("--style").flatMap(ArtStyle.init(rawValue:)) ?? .cartoon
-    try SpriteFactory.exportPNGs(to: url, palette: .forCoat(coat), style: style)
+    try SpriteFactory.exportPNGs(to: url, coat: coat, style: style)
+}
+runExport(flag: "--export-anime-preview", defaultPath: "AnimePreview", label: "anime preview sheets") {
+    try AnimePreview.export(to: $0)
 }
 runExport(flag: "--export-sounds", defaultPath: "SynthesizedSounds", label: "synthesized sounds") {
     try SoundFactory.exportWAVs(to: $0)

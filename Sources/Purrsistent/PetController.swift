@@ -29,6 +29,14 @@ final class PetController: NSObject, PetViewDelegate {
     private var lastStrokeTime: TimeInterval = 0
     private var lastPounceTime: TimeInterval = -.infinity
 
+    /// The anime style is animated live rather than from pre-rendered frames.
+    private let anime = AnimeCatAnimator()
+    private let animeRenderer = AnimeCatRenderer()
+    private var animeAppearance: CatAppearance
+    private var timeSinceRender: TimeInterval = .infinity
+    private var pendingSpeech: Task<Void, Never>?
+    private var lastPresenceCheck: TimeInterval = 0
+    private var userWasAway = false
     private static let tickRate: TimeInterval = 1.0 / 30
     private static let baseWalkSpeed: CGFloat = 45
     private static let gravity: CGFloat = 2400
@@ -51,6 +59,11 @@ final class PetController: NSObject, PetViewDelegate {
     private static let pounceMinimumMood = 0.4
     private static let leapSpeedUp: CGFloat = 700
     private static let maxLeapSpeedSideways: CGFloat = 1000
+    /// A sleeping cat breathes slowly enough to redraw less often.
+    private static let sleepingRenderInterval: TimeInterval = 1.0 / 15
+    /// How long the user must be away from the Mac before the pet greets them on return.
+    private static let awayThreshold: TimeInterval = 180
+    private static let anyInputEvent = CGEventType(rawValue: ~0)!
 
     var contextMenuProvider: (() -> NSMenu?)?
 
@@ -64,7 +77,16 @@ final class PetController: NSObject, PetViewDelegate {
         animator = SpriteAnimator(coat: settings.coat, style: settings.style)
         sound = SoundPlayer(voice: settings.voice)
         mood = Mood(settings: settings)
+        animeAppearance = .forCoat(settings.coat)
         super.init()
+
+        anime.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(accessibilityOptionsChanged),
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil
+        )
 
         view.autoresizingMask = [.width, .height]
         view.delegate = self
@@ -91,11 +113,31 @@ final class PetController: NSObject, PetViewDelegate {
         sound.play(.meow)
     }
 
+    /// Looks up attentively (waking first if asleep), then speaks with the bubble.
     func say(_ message: String, meow: Bool = false) {
         guard isVisible else { return }
-        machine.perform(.yawn)
-        if meow { sound.play(.meow) }
-        bubble.show(message, above: window.frame)
+        let delay: TimeInterval
+        if machine.state == .sleep {
+            machine.wake()
+            delay = 1.2
+        } else {
+            machine.attend()
+            delay = 0.45
+        }
+        pendingSpeech?.cancel()
+        pendingSpeech = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard let self, !Task.isCancelled, self.isVisible else { return }
+            if meow { self.sound.play(.meow) }
+            self.bubble.show(message, above: self.window.frame)
+            self.anime.speak(for: min(2.4, max(0.8, Double(message.count) * 0.05)))
+        }
+    }
+
+    /// A brief puzzled look when something the user asked for didn't work.
+    func showConfusion() {
+        guard isVisible else { return }
+        anime.showConfusion()
     }
 
     var moodLabel: String { mood.label }
@@ -118,6 +160,7 @@ final class PetController: NSObject, PetViewDelegate {
         let y = min(bounds.maxY - size, frame.maxY + 120)
         treat = Treat(size: size, origin: NSPoint(x: centerX - size / 2, y: y))
         sound.play(.chirp, volume: 0.6)
+        machine.attend()
     }
 
     private func finishTreat() {
@@ -135,7 +178,7 @@ final class PetController: NSObject, PetViewDelegate {
         guard treat.hasLanded else { return }
 
         switch machine.state {
-        case .dragged, .falling, .leaping, .pounceCrouch, .petted, .happy, .eating:
+        case .dragged, .falling, .leaping, .pounceCrouch, .petted, .happy, .eating, .startled, .waking:
             return
         default:
             break
@@ -171,6 +214,8 @@ final class PetController: NSObject, PetViewDelegate {
         switch new {
         case .dragged:
             sound.play(.chirp, volume: 0.8)
+        case .startled:
+            sound.play(.chirp, volume: 0.7)
         case .leaping:
             launchPounce()
         case .sleep, .petted, .knead:
@@ -204,11 +249,15 @@ final class PetController: NSObject, PetViewDelegate {
             let timer = Timer(timeInterval: Self.tickRate, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
             RunLoop.main.add(timer, forMode: .common)
             self.timer = timer
+            animeRenderer.invalidate()
+            timeSinceRender = .infinity
             tick()
             if Self.purrs(in: machine.state) { sound.startLoop(.purr, volume: Self.purrVolume) }
         } else {
             timer?.invalidate()
             timer = nil
+            pendingSpeech?.cancel()
+            pendingSpeech = nil
             window.orderOut(nil)
             bubble.hide()
             treat?.remove()
@@ -225,6 +274,9 @@ final class PetController: NSObject, PetViewDelegate {
         sound.load(voice: settings.voice)
         reminder.interval = settings.breakInterval.seconds
         animator.load(coat: settings.coat, style: settings.style)
+        animeAppearance = .forCoat(settings.coat)
+        animeRenderer.invalidate()
+        timeSinceRender = .infinity
         view.pixelated = Self.isPixelated(settings)
         animator.walkRate = Double(settings.speed.multiplier)
         if isVisible, Self.purrs(in: machine.state) {
@@ -258,19 +310,89 @@ final class PetController: NSObject, PetViewDelegate {
         updateTreat(dt)
         updatePosition(dt)
         faceCursor(mouse)
+        checkForReturningUser(now: now)
         bubble.follow(window.frame)
 
-        animator.play(machine.state.animationKey)
-        animator.advance(by: dt)
-        view.image = animator.currentFrame(facing: facing)
+        if usesLiveAnime {
+            animateAnime(dt, mouse: mouse, mouseOverPet: mouseOverPet)
+        } else {
+            animator.play(machine.state.animationKey)
+            animator.advance(by: dt)
+            view.image = animator.currentFrame(facing: facing)
+            view.overlay = nil
+        }
 
         updateMousePassThrough(mouseOverPet: mouseOverPet)
+    }
+
+    // MARK: - Anime
+
+    private var usesLiveAnime: Bool {
+        settings.style == .anime && settings.coat != .custom
+    }
+
+    private func animateAnime(_ dt: TimeInterval, mouse: NSPoint, mouseOverPet: Bool) {
+        anime.setMotion(AnimeMotion(machine.state))
+        anime.walkRate = Double(settings.speed.multiplier)
+        anime.facing = facing
+        anime.drowsiness = CGFloat(machine.drowsiness)
+        anime.hovered = mouseOverPet && !isPressing
+        anime.attention = attentionPoint(mouse: mouse)
+        anime.update(by: dt)
+
+        timeSinceRender += dt
+        let interval = machine.state == .sleep ? Self.sleepingRenderInterval : 0
+        guard timeSinceRender >= interval, window.occlusionState.contains(.visible) else { return }
+        timeSinceRender = 0
+        let size = view.bounds.size, scale = window.backingScaleFactor
+        if let image = animeRenderer.renderCat(anime, appearance: animeAppearance, size: size, scale: scale) {
+            view.image = image
+        }
+        view.overlay = animeRenderer.renderParticles(anime, appearance: animeAppearance, size: size, scale: scale)
+    }
+
+    /// What the cat watches, in its right-facing canvas: a treat if there is one, otherwise a
+    /// nearby cursor.
+    private func attentionPoint(mouse: NSPoint) -> CGPoint? {
+        let frame = window.frame
+        let target: NSPoint
+        if let treat {
+            target = NSPoint(x: treat.frame.midX, y: treat.frame.midY)
+        } else {
+            guard hypot(mouse.x - frame.midX, mouse.y - frame.midY) < Self.cursorAwarenessRadius * 1.5 else { return nil }
+            target = mouse
+        }
+        let scale = AnimeCatFactory.canvas / frame.width
+        let x = (target.x - frame.minX) * scale
+        return CGPoint(x: facing == .left ? AnimeCatFactory.canvas - x : x, y: (target.y - frame.minY) * scale)
+    }
+
+    @objc private func accessibilityOptionsChanged() {
+        anime.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    /// When the user comes back after a while away from the Mac, the pet wakes up (or just
+    /// looks up) to greet them.
+    private func checkForReturningUser(now: TimeInterval) {
+        guard now - lastPresenceCheck >= 1 else { return }
+        lastPresenceCheck = now
+        let idle = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: Self.anyInputEvent)
+        if idle >= Self.awayThreshold {
+            userWasAway = true
+        } else if userWasAway, idle < 2 {
+            userWasAway = false
+            if machine.state == .sleep {
+                machine.wake()
+            } else {
+                machine.attend()
+            }
+        }
     }
 
     // MARK: - Cursor
 
     private func faceCursor(_ mouse: NSPoint) {
-        guard [.idle, .sit, .pounceCrouch].contains(machine.state) else { return }
+        guard [.idle, .sit, .pounceCrouch, .curious].contains(machine.state) else { return }
         let frame = window.frame
         let dx = mouse.x - frame.midX
         let dy = mouse.y - frame.midY
@@ -352,7 +474,7 @@ final class PetController: NSObject, PetViewDelegate {
                 frame.origin.y = ground
                 velocity.dy = 0
                 if abs(velocity.dx) > 60 { facing = velocity.dx < 0 ? .left : .right }
-                machine.land()
+                machine.land(impactSpeed: impactSpeed)
                 sound.play(.thud, volume: Float(min(1, max(0.15, impactSpeed / 1500))))
             }
         case .walkLeft, .walkRight:

@@ -43,7 +43,7 @@ enum SoundVolume: String, CaseIterable {
 }
 
 enum Coat: String, CaseIterable {
-    case orange, midnight, silver, snowball, custom
+    case orange, midnight, silver, snowball, cream, custom
 
     var title: String { rawValue.capitalized }
 }
@@ -172,7 +172,7 @@ final class Settings {
     }
 
     var style: ArtStyle {
-        get { defaults.string(forKey: Keys.style).flatMap(ArtStyle.init(rawValue:)) ?? .cartoon }
+        get { defaults.string(forKey: Keys.style).flatMap(ArtStyle.init(rawValue:)) ?? .anime }
         set {
             defaults.set(newValue.rawValue, forKey: Keys.style)
             onChange?()

@@ -87,6 +87,13 @@ enum SpriteFactory {
             ink: NSColor(calibratedWhite: 0.2, alpha: 1),
             iris: NSColor(calibratedRed: 0.45, green: 0.72, blue: 0.42, alpha: 1)
         )
+        static let cream = Palette(
+            fur: NSColor(calibratedRed: 0.97, green: 0.91, blue: 0.8, alpha: 1),
+            belly: NSColor(calibratedRed: 1, green: 0.97, blue: 0.92, alpha: 1),
+            outline: NSColor(calibratedRed: 0.48, green: 0.41, blue: 0.36, alpha: 1),
+            ink: NSColor(calibratedWhite: 0.18, alpha: 1),
+            iris: NSColor(calibratedRed: 0.36, green: 0.64, blue: 0.97, alpha: 1)
+        )
 
         static func forCoat(_ coat: Coat) -> Palette {
             switch coat {
@@ -94,6 +101,7 @@ enum SpriteFactory {
             case .midnight: .midnight
             case .silver: .silver
             case .snowball: .snowball
+            case .cream: .cream
             }
         }
     }
@@ -347,10 +355,11 @@ enum SpriteFactory {
         }
     }
 
-    static func frames(for key: AnimationKey, palette: Palette = .orange, style: ArtStyle = .cartoon) -> [NSImage] {
+    static func frames(for key: AnimationKey, coat: Coat = .orange, style: ArtStyle = .cartoon) -> [NSImage] {
+        let palette = Palette.forCoat(coat)
         switch style {
         case .anime:
-            return AnimeCatFactory.frames(for: key, palette: palette)
+            return AnimeCatFactory.frames(for: key, appearance: .forCoat(coat))
         case .pixel:
             return poses(for: key).map { pose in
                 PixelArt.render(gridSize: 32, outline: palette.outline, keyColor: palette.fur) { rect in
@@ -375,10 +384,10 @@ enum SpriteFactory {
         style == .anime ? AnimeCatFactory.framesPerSecond(for: key) : key.framesPerSecond
     }
 
-    static func exportPNGs(to directory: URL, palette: Palette = .orange, style: ArtStyle = .cartoon, pixelSize: Int = 256) throws {
+    static func exportPNGs(to directory: URL, coat: Coat = .orange, style: ArtStyle = .cartoon, pixelSize: Int = 256) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         for key in AnimationKey.allCases {
-            for (index, image) in frames(for: key, palette: palette, style: style).enumerated() {
+            for (index, image) in frames(for: key, coat: coat, style: style).enumerated() {
                 guard let rep = NSBitmapImageRep(
                     bitmapDataPlanes: nil,
                     pixelsWide: pixelSize,

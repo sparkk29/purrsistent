@@ -9,5 +9,10 @@ let package = Package(
             name: "Purrsistent",
             path: "Sources/Purrsistent"
         ),
+        .testTarget(
+            name: "PurrsistentTests",
+            dependencies: ["Purrsistent"],
+            path: "Tests/PurrsistentTests"
+        ),
     ]
 )

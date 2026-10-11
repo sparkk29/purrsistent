@@ -17,6 +17,20 @@ final class PetView: NSView {
         }
     }
 
+    /// Drawn above `image` but ignored by hit-testing, for effects floating around the pet.
+    var overlay: NSImage? {
+        didSet {
+            if overlay !== oldValue { needsDisplay = true }
+        }
+    }
+
+    private let overlayLayer: CALayer = {
+        let layer = CALayer()
+        layer.contentsGravity = .resize
+        layer.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        return layer
+    }()
+
     /// Scales frames with nearest-neighbor sampling so pixel art stays crisp.
     var pixelated = false {
         didSet {
@@ -28,9 +42,39 @@ final class PetView: NSView {
 
     override var isOpaque: Bool { false }
 
-    override func draw(_ dirtyRect: NSRect) {
-        NSGraphicsContext.current?.imageInterpolation = pixelated ? .none : .high
-        image?.draw(in: bounds)
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+    }
+
+    /// Hands frames straight to Core Animation, which scales and color-matches them on the GPU.
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        guard let layer else { return }
+        let scale = window?.backingScaleFactor ?? 2
+        layer.contentsGravity = .resize
+        layer.contentsScale = scale
+        layer.magnificationFilter = pixelated ? .nearest : .linear
+        layer.minificationFilter = pixelated ? .nearest : .linear
+        layer.contents = image?.layerContents(forContentsScale: scale)
+
+        if overlayLayer.superlayer !== layer { layer.addSublayer(overlayLayer) }
+        overlayLayer.frame = layer.bounds
+        overlayLayer.contentsScale = scale
+        overlayLayer.contents = overlay?.layerContents(forContentsScale: scale)
+    }
+
+    override func layout() {
+        super.layout()
+        overlayLayer.frame = bounds
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
