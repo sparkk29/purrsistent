@@ -3,7 +3,7 @@ import AppKit
 /// Draws the built-in placeholder cat. All geometry is in a 64x64 unit canvas, facing right.
 enum SpriteFactory {
     enum EyeStyle { case open, blink, closed, happy, wide }
-    enum MouthStyle { case smile, open, small }
+    enum MouthStyle { case smile, open, small, yawn }
 
     struct Pose {
         var lift: CGFloat = 0
@@ -19,16 +19,64 @@ enum SpriteFactory {
         var zCount = 0
         var showShadow = true
         var tailWag: CGFloat = 0
+        /// When set, a front paw is raised to the face, lifted by this amount.
+        var pawRaised: CGFloat?
+    }
+
+    struct Palette {
+        var fur: NSColor
+        var belly: NSColor
+        var outline: NSColor
+        /// Line work drawn on top of the fur: closed eyes, mouth.
+        var ink: NSColor
+        /// Iris color for open eyes; nil draws solid dark eyes.
+        var iris: NSColor?
+
+        static let orange = Palette(
+            fur: NSColor(calibratedRed: 0.96, green: 0.68, blue: 0.38, alpha: 1),
+            belly: NSColor(calibratedRed: 0.99, green: 0.86, blue: 0.68, alpha: 1),
+            outline: NSColor(calibratedRed: 0.45, green: 0.27, blue: 0.12, alpha: 1),
+            ink: NSColor(calibratedWhite: 0.15, alpha: 1)
+        )
+        static let midnight = Palette(
+            fur: NSColor(calibratedRed: 0.2, green: 0.2, blue: 0.24, alpha: 1),
+            belly: NSColor(calibratedRed: 0.32, green: 0.32, blue: 0.37, alpha: 1),
+            outline: NSColor(calibratedRed: 0.07, green: 0.07, blue: 0.09, alpha: 1),
+            ink: NSColor(calibratedWhite: 0.9, alpha: 1),
+            iris: NSColor(calibratedRed: 0.98, green: 0.8, blue: 0.25, alpha: 1)
+        )
+        static let silver = Palette(
+            fur: NSColor(calibratedRed: 0.72, green: 0.74, blue: 0.78, alpha: 1),
+            belly: NSColor(calibratedRed: 0.91, green: 0.92, blue: 0.94, alpha: 1),
+            outline: NSColor(calibratedRed: 0.3, green: 0.32, blue: 0.36, alpha: 1),
+            ink: NSColor(calibratedWhite: 0.15, alpha: 1),
+            iris: NSColor(calibratedRed: 0.35, green: 0.62, blue: 0.88, alpha: 1)
+        )
+        static let snowball = Palette(
+            fur: NSColor(calibratedRed: 0.98, green: 0.98, blue: 0.97, alpha: 1),
+            belly: NSColor(calibratedRed: 0.95, green: 0.91, blue: 0.86, alpha: 1),
+            outline: NSColor(calibratedRed: 0.5, green: 0.5, blue: 0.56, alpha: 1),
+            ink: NSColor(calibratedWhite: 0.2, alpha: 1),
+            iris: NSColor(calibratedRed: 0.45, green: 0.72, blue: 0.42, alpha: 1)
+        )
+
+        static func forCoat(_ coat: Coat) -> Palette {
+            switch coat {
+            case .orange, .custom: .orange
+            case .midnight: .midnight
+            case .silver: .silver
+            case .snowball: .snowball
+            }
+        }
     }
 
     private static let canvas: CGFloat = 64
     private static let imageSize = NSSize(width: 128, height: 128)
 
-    private static let fur = NSColor(calibratedRed: 0.96, green: 0.68, blue: 0.38, alpha: 1)
-    private static let belly = NSColor(calibratedRed: 0.99, green: 0.86, blue: 0.68, alpha: 1)
-    private static let outline = NSColor(calibratedRed: 0.45, green: 0.27, blue: 0.12, alpha: 1)
     private static let pink = NSColor(calibratedRed: 0.98, green: 0.6, blue: 0.64, alpha: 1)
-    private static let ink = NSColor(calibratedWhite: 0.15, alpha: 1)
+    private static let pupil = NSColor(calibratedWhite: 0.1, alpha: 1)
+    private static let mouthInside = NSColor(calibratedRed: 0.5, green: 0.18, blue: 0.22, alpha: 1)
+    private static let snoreInk = NSColor(calibratedWhite: 0.15, alpha: 0.7)
 
     static func poses(for key: AnimationKey) -> [Pose] {
         switch key {
@@ -108,19 +156,62 @@ enum SpriteFactory {
                 pose.tailWag = i == 1 || i == 2 ? 4 : 2
                 return pose
             }
+        case .petted:
+            return (0..<2).map { i in
+                var pose = Pose()
+                pose.squashX = 1.04
+                pose.squashY = i == 0 ? 0.95 : 0.97
+                pose.eyes = .closed
+                pose.blush = true
+                pose.tailWag = i == 0 ? 3 : 5
+                return pose
+            }
+        case .yawn:
+            let stretch: [CGFloat] = [1, 1.06, 1.1, 1.1, 1.06, 1]
+            let mouths: [MouthStyle] = [.smile, .open, .yawn, .yawn, .open, .smile]
+            return (0..<6).map { i in
+                var pose = Pose()
+                pose.squashX = 2 - stretch[i]
+                pose.squashY = stretch[i]
+                pose.eyes = i == 0 || i == 5 ? .open : .closed
+                pose.mouth = mouths[i]
+                pose.tailWag = stretch[i] * 3
+                return pose
+            }
+        case .groom:
+            return (0..<4).map { i in
+                var pose = Pose()
+                pose.squashX = 1.04
+                pose.squashY = 0.96
+                pose.eyes = .closed
+                pose.mouth = .small
+                pose.pawRaised = i.isMultiple(of: 2) ? 0 : 2
+                pose.tailWag = i < 2 ? 2 : 3
+                return pose
+            }
+        case .eat:
+            return (0..<4).map { i in
+                var pose = Pose()
+                pose.squashX = 1.06
+                pose.squashY = i.isMultiple(of: 2) ? 0.92 : 0.95
+                pose.eyes = .happy
+                pose.mouth = i.isMultiple(of: 2) ? .open : .small
+                pose.tailWag = i.isMultiple(of: 2) ? 3 : 5
+                return pose
+            }
         }
     }
 
-    static func frames(for key: AnimationKey) -> [NSImage] {
+    static func frames(for key: AnimationKey, palette: Palette = .orange) -> [NSImage] {
         poses(for: key).map { pose in
             NSImage(size: imageSize, flipped: false) { rect in
-                draw(pose, in: rect)
+                draw(pose, palette: palette, in: rect)
                 return true
             }
         }
     }
 
-    static func exportPNGs(to directory: URL, pixelSize: Int = 256) throws {
+    static func exportPNGs(to directory: URL, palette: Palette = .orange, pixelSize: Int = 256) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         for key in AnimationKey.allCases {
             for (index, pose) in poses(for: key).enumerated() {
@@ -139,7 +230,7 @@ enum SpriteFactory {
 
                 NSGraphicsContext.saveGraphicsState()
                 NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-                draw(pose, in: NSRect(x: 0, y: 0, width: pixelSize, height: pixelSize))
+                draw(pose, palette: palette, in: NSRect(x: 0, y: 0, width: pixelSize, height: pixelSize))
                 NSGraphicsContext.restoreGraphicsState()
 
                 if let data = rep.representation(using: .png, properties: [:]) {
@@ -149,7 +240,7 @@ enum SpriteFactory {
         }
     }
 
-    static func draw(_ pose: Pose, in rect: NSRect) {
+    static func draw(_ pose: Pose, palette: Palette = .orange, in rect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
         context.saveGState()
         context.translateBy(x: rect.minX, y: rect.minY)
@@ -166,30 +257,39 @@ enum SpriteFactory {
             NSBezierPath(ovalIn: NSRect(x: 32 - width / 2, y: 3, width: width, height: 5)).fill()
         }
 
-        drawTail(body: body, wag: pose.tailWag)
-        drawFeet(body: body, pose: pose)
-        if pose.armsUp { drawArms(body: body) }
-        drawEars(body: body)
+        drawTail(body: body, wag: pose.tailWag, palette: palette)
+        drawFeet(body: body, pose: pose, palette: palette)
+        if pose.armsUp { drawArms(body: body, palette: palette) }
+        drawEars(body: body, palette: palette)
 
         let bodyPath = NSBezierPath(ovalIn: body)
-        fur.setFill()
+        palette.fur.setFill()
         bodyPath.fill()
-        belly.setFill()
+        palette.belly.setFill()
         NSBezierPath(ovalIn: NSRect(
             x: body.midX - bodyWidth * 0.22 + 2,
             y: body.minY + 2,
             width: bodyWidth * 0.44,
             height: bodyHeight * 0.4
         )).fill()
-        outline.setStroke()
+        palette.outline.setStroke()
         bodyPath.lineWidth = 1.5
         bodyPath.stroke()
 
-        drawFace(body: body, pose: pose)
+        drawFace(body: body, pose: pose, palette: palette)
+        if let pawLift = pose.pawRaised { drawRaisedPaw(body: body, lift: pawLift, palette: palette) }
         if pose.zCount > 0 { drawZs(count: pose.zCount) }
     }
 
-    private static func drawTail(body: NSRect, wag: CGFloat) {
+    private static func fillAndOutline(_ path: NSBezierPath, _ palette: Palette) {
+        palette.fur.setFill()
+        path.fill()
+        palette.outline.setStroke()
+        path.lineWidth = 1.5
+        path.stroke()
+    }
+
+    private static func drawTail(body: NSRect, wag: CGFloat, palette: Palette) {
         let tail = NSBezierPath()
         tail.move(to: NSPoint(x: body.minX + 5, y: body.minY + 8))
         tail.curve(
@@ -199,41 +299,36 @@ enum SpriteFactory {
         )
         tail.lineCapStyle = .round
         tail.lineWidth = 6.5
-        outline.setStroke()
+        palette.outline.setStroke()
         tail.stroke()
         tail.lineWidth = 3.5
-        fur.setStroke()
+        palette.fur.setStroke()
         tail.stroke()
     }
 
-    private static func drawFeet(body: NSRect, pose: Pose) {
+    private static func drawFeet(body: NSRect, pose: Pose, palette: Palette) {
         let baseY = body.minY - (pose.dangling ? 5 : 2)
         let feet: [(x: CGFloat, lift: CGFloat)] = [
             (body.midX - 9, pose.backFootLift),
             (body.midX + 9, pose.frontFootLift),
         ]
         for foot in feet {
-            let path = NSBezierPath(ovalIn: NSRect(x: foot.x - 5, y: baseY + foot.lift, width: 10, height: 6))
-            fur.setFill()
-            path.fill()
-            outline.setStroke()
-            path.lineWidth = 1.5
-            path.stroke()
+            fillAndOutline(NSBezierPath(ovalIn: NSRect(x: foot.x - 5, y: baseY + foot.lift, width: 10, height: 6)), palette)
         }
     }
 
-    private static func drawArms(body: NSRect) {
+    private static func drawArms(body: NSRect, palette: Palette) {
         for x in [body.minX - 2, body.maxX - 6] {
-            let path = NSBezierPath(ovalIn: NSRect(x: x, y: body.midY + 2, width: 8, height: 11))
-            fur.setFill()
-            path.fill()
-            outline.setStroke()
-            path.lineWidth = 1.5
-            path.stroke()
+            fillAndOutline(NSBezierPath(ovalIn: NSRect(x: x, y: body.midY + 2, width: 8, height: 11)), palette)
         }
     }
 
-    private static func drawEars(body: NSRect) {
+    private static func drawRaisedPaw(body: NSRect, lift: CGFloat, palette: Palette) {
+        let eyeY = body.minY + body.height * 0.58
+        fillAndOutline(NSBezierPath(ovalIn: NSRect(x: body.midX + 9, y: eyeY - 11 + lift, width: 8, height: 9)), palette)
+    }
+
+    private static func drawEars(body: NSRect, palette: Palette) {
         let top = body.maxY
         let ears: [[NSPoint]] = [
             [NSPoint(x: body.midX - 16, y: top - 8), NSPoint(x: body.midX - 12, y: top + 8), NSPoint(x: body.midX - 3, y: top - 2)],
@@ -241,12 +336,8 @@ enum SpriteFactory {
         ]
         for points in ears {
             let outer = polygon(points)
-            fur.setFill()
-            outer.fill()
-            outline.setStroke()
-            outer.lineWidth = 1.5
             outer.lineJoinStyle = .round
-            outer.stroke()
+            fillAndOutline(outer, palette)
 
             let centroid = NSPoint(
                 x: points.map(\.x).reduce(0, +) / 3,
@@ -258,35 +349,43 @@ enum SpriteFactory {
         }
     }
 
-    private static func drawFace(body: NSRect, pose: Pose) {
+    private static func drawFace(body: NSRect, pose: Pose, palette: Palette) {
         let eyeY = body.minY + body.height * 0.58
         let eyeXs = [body.midX - 3, body.midX + 9]
 
         for x in eyeXs {
             switch pose.eyes {
             case .open:
-                ink.setFill()
-                NSBezierPath(ovalIn: NSRect(x: x - 2.2, y: eyeY - 3, width: 4.4, height: 6)).fill()
+                let eye = NSRect(x: x - 2.2, y: eyeY - 3, width: 4.4, height: 6)
+                if let iris = palette.iris {
+                    iris.setFill()
+                    NSBezierPath(ovalIn: eye).fill()
+                    pupil.setFill()
+                    NSBezierPath(ovalIn: NSRect(x: x - 0.75, y: eyeY - 2.4, width: 1.5, height: 4.8)).fill()
+                } else {
+                    pupil.setFill()
+                    NSBezierPath(ovalIn: eye).fill()
+                }
                 NSColor.white.setFill()
                 NSBezierPath(ovalIn: NSRect(x: x - 0.6, y: eyeY + 0.6, width: 1.6, height: 1.6)).fill()
             case .blink, .closed:
                 let lid = NSBezierPath()
                 lid.move(to: NSPoint(x: x - 3, y: eyeY))
                 lid.curve(to: NSPoint(x: x + 3, y: eyeY), controlPoint1: NSPoint(x: x - 1, y: eyeY - 2), controlPoint2: NSPoint(x: x + 1, y: eyeY - 2))
-                strokeInk(lid, width: 1.4)
+                stroke(lid, palette.ink, width: 1.4)
             case .happy:
                 let arc = NSBezierPath()
                 arc.move(to: NSPoint(x: x - 3, y: eyeY - 1.5))
                 arc.line(to: NSPoint(x: x, y: eyeY + 1.5))
                 arc.line(to: NSPoint(x: x + 3, y: eyeY - 1.5))
                 arc.lineJoinStyle = .round
-                strokeInk(arc, width: 1.4)
+                stroke(arc, palette.ink, width: 1.4)
             case .wide:
                 let white = NSBezierPath(ovalIn: NSRect(x: x - 3.5, y: eyeY - 3.5, width: 7, height: 7))
                 NSColor.white.setFill()
                 white.fill()
-                strokeInk(white, width: 1)
-                ink.setFill()
+                stroke(white, pupil, width: 1)
+                pupil.setFill()
                 NSBezierPath(ovalIn: NSRect(x: x - 1.2, y: eyeY - 1.5, width: 2.6, height: 2.6)).fill()
             }
         }
@@ -306,13 +405,18 @@ enum SpriteFactory {
             mouth.curve(to: NSPoint(x: mouthX, y: mouthY + 0.5), controlPoint1: NSPoint(x: mouthX - 2.5, y: mouthY - 1), controlPoint2: NSPoint(x: mouthX - 0.5, y: mouthY - 1))
             mouth.curve(to: NSPoint(x: mouthX + 3, y: mouthY + 1), controlPoint1: NSPoint(x: mouthX + 0.5, y: mouthY - 1), controlPoint2: NSPoint(x: mouthX + 2.5, y: mouthY - 1))
             mouth.lineCapStyle = .round
-            strokeInk(mouth, width: 1.2)
+            stroke(mouth, palette.ink, width: 1.2)
         case .open:
-            ink.setFill()
+            mouthInside.setFill()
             NSBezierPath(ovalIn: NSRect(x: mouthX - 1.6, y: mouthY - 2, width: 3.2, height: 3.5)).fill()
         case .small:
-            ink.setFill()
+            palette.ink.setFill()
             NSBezierPath(ovalIn: NSRect(x: mouthX - 1, y: mouthY - 0.5, width: 2, height: 2)).fill()
+        case .yawn:
+            mouthInside.setFill()
+            NSBezierPath(ovalIn: NSRect(x: mouthX - 3, y: mouthY - 5, width: 6, height: 7)).fill()
+            pink.setFill()
+            NSBezierPath(ovalIn: NSRect(x: mouthX - 1.8, y: mouthY - 4.5, width: 3.6, height: 2.8)).fill()
         }
     }
 
@@ -321,11 +425,38 @@ enum SpriteFactory {
             let size = 7 + CGFloat(index) * 2
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: size, weight: .heavy),
-                .foregroundColor: ink.withAlphaComponent(0.7),
+                .foregroundColor: snoreInk,
             ]
             NSAttributedString(string: "z", attributes: attributes)
                 .draw(at: NSPoint(x: 45 + CGFloat(index) * 5, y: 38 + CGFloat(index) * 7))
         }
+    }
+
+    /// The treat: a little fish on a 32x32 unit canvas.
+    static func drawFish(in rect: NSRect) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        context.saveGState()
+        context.translateBy(x: rect.minX, y: rect.minY)
+        context.scaleBy(x: rect.width / 32, y: rect.height / 32)
+        defer { context.restoreGState() }
+
+        let scales = NSColor(calibratedRed: 0.55, green: 0.76, blue: 0.95, alpha: 1)
+        let outline = NSColor(calibratedRed: 0.2, green: 0.35, blue: 0.55, alpha: 1)
+
+        NSColor.black.withAlphaComponent(0.15).setFill()
+        NSBezierPath(ovalIn: NSRect(x: 5, y: 1.5, width: 22, height: 3)).fill()
+
+        let fish = NSBezierPath(ovalIn: NSRect(x: 3, y: 5, width: 19, height: 11))
+        fish.append(polygon([NSPoint(x: 20, y: 10.5), NSPoint(x: 29, y: 16), NSPoint(x: 29, y: 5)]))
+        fish.append(polygon([NSPoint(x: 10, y: 15), NSPoint(x: 13.5, y: 19), NSPoint(x: 16, y: 15)]))
+        scales.setFill()
+        fish.fill()
+        stroke(fish, outline, width: 1.2)
+
+        NSColor.white.setFill()
+        NSBezierPath(ovalIn: NSRect(x: 6, y: 9, width: 4, height: 4)).fill()
+        pupil.setFill()
+        NSBezierPath(ovalIn: NSRect(x: 6.8, y: 10, width: 1.8, height: 1.8)).fill()
     }
 
     private static func polygon(_ points: [NSPoint]) -> NSBezierPath {
@@ -336,8 +467,8 @@ enum SpriteFactory {
         return path
     }
 
-    private static func strokeInk(_ path: NSBezierPath, width: CGFloat) {
-        ink.setStroke()
+    private static func stroke(_ path: NSBezierPath, _ color: NSColor, width: CGFloat) {
+        color.setStroke()
         path.lineWidth = width
         path.stroke()
     }

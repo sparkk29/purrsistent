@@ -34,98 +34,87 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     private func populate(_ menu: NSMenu) {
         menu.removeAllItems()
+        menu.autoenablesItems = false
 
-        menu.addItem(item(pet.isVisible ? "Hide Pet" : "Show Pet", action: #selector(toggleVisibility)))
+        menu.addItem(item(pet.isVisible ? "Hide Pet" : "Show Pet") { [pet] in pet.setVisible(!pet.isVisible) })
         menu.addItem(.separator())
 
-        let sizeItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
-        let sizeMenu = NSMenu()
-        for size in PetSize.allCases {
-            let option = item(size.title, action: #selector(selectSize(_:)))
-            option.representedObject = size.rawValue
-            option.state = settings.size == size ? .on : .off
-            sizeMenu.addItem(option)
-        }
-        sizeItem.submenu = sizeMenu
-        menu.addItem(sizeItem)
-
-        let speedItem = NSMenuItem(title: "Speed", action: nil, keyEquivalent: "")
-        let speedMenu = NSMenu()
-        for speed in PetSpeed.allCases {
-            let option = item(speed.title, action: #selector(selectSpeed(_:)))
-            option.representedObject = speed.rawValue
-            option.state = settings.speed == speed ? .on : .off
-            speedMenu.addItem(option)
-        }
-        speedItem.submenu = speedMenu
-        menu.addItem(speedItem)
-
-        let stayStill = item("Stay Still", action: #selector(toggleStayStill))
-        stayStill.state = settings.stayStill ? .on : .off
-        menu.addItem(stayStill)
-
+        let mood = NSMenuItem(title: "Mood: \(pet.moodLabel)", action: nil, keyEquivalent: "")
+        mood.isEnabled = false
+        menu.addItem(mood)
+        let treat = item("Give Treat") { [pet] in pet.giveTreat() }
+        treat.isEnabled = pet.isVisible && !pet.hasTreat
+        menu.addItem(treat)
         menu.addItem(.separator())
 
-        let sounds = item("Sounds", action: #selector(toggleSounds))
-        sounds.state = settings.soundEnabled ? .on : .off
-        menu.addItem(sounds)
-
-        let volumeItem = NSMenuItem(title: "Volume", action: nil, keyEquivalent: "")
-        let volumeMenu = NSMenu()
-        for volume in SoundVolume.allCases {
-            let option = item(volume.title, action: #selector(selectVolume(_:)))
-            option.representedObject = volume.rawValue
-            option.state = settings.soundVolume == volume ? .on : .off
-            volumeMenu.addItem(option)
-        }
-        volumeItem.submenu = volumeMenu
-        menu.addItem(volumeItem)
-
+        let coats = Coat.allCases.filter { $0 != .custom || SpriteAnimator.hasCustomSprites() || settings.coat == .custom }
+        menu.addItem(choices("Coat", coats, selected: settings.coat, title: \.title) { [settings] in settings.coat = $0 })
+        menu.addItem(choices("Size", PetSize.allCases, selected: settings.size, title: \.title) { [settings] in settings.size = $0 })
+        menu.addItem(choices("Speed", PetSpeed.allCases, selected: settings.speed, title: \.title) { [settings] in settings.speed = $0 })
+        menu.addItem(toggle("Stay Still", isOn: settings.stayStill) { [settings] in settings.stayStill.toggle() })
         menu.addItem(.separator())
 
-        let launchAtLogin = item("Launch at Login", action: #selector(toggleLaunchAtLogin))
-        launchAtLogin.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        menu.addItem(launchAtLogin)
-
+        menu.addItem(toggle("Sounds", isOn: settings.soundEnabled) { [settings] in settings.soundEnabled.toggle() })
+        menu.addItem(choices("Volume", SoundVolume.allCases, selected: settings.soundVolume, title: \.title) { [settings, pet] in
+            settings.soundVolume = $0
+            pet.previewSound()
+        })
         menu.addItem(.separator())
-        menu.addItem(item("Quit Purrsistent", action: #selector(quit), key: "q"))
+
+        menu.addItem(choices("Break Reminders", BreakInterval.allCases, selected: settings.breakInterval, title: \.title) { [settings] in
+            settings.breakInterval = $0
+        })
+        menu.addItem(.separator())
+
+        menu.addItem(toggle("Launch at Login", isOn: SMAppService.mainApp.status == .enabled) { [weak self] in
+            self?.toggleLaunchAtLogin()
+        })
+        menu.addItem(.separator())
+        menu.addItem(item("Quit Purrsistent", key: "q") { NSApp.terminate(nil) })
     }
 
-    private func item(_ title: String, action: Selector, key: String = "") -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+    // MARK: - Item builders
+
+    /// Holds a menu item's handler, since `NSMenuItem` only supports target/selector actions.
+    private final class Action: NSObject {
+        let handler: () -> Void
+        init(_ handler: @escaping () -> Void) { self.handler = handler }
+    }
+
+    private func item(_ title: String, key: String = "", _ handler: @escaping () -> Void) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(runAction(_:)), keyEquivalent: key)
         item.target = self
+        item.representedObject = Action(handler)
         return item
     }
 
-    @objc private func toggleVisibility() {
-        pet.setVisible(!pet.isVisible)
+    private func toggle(_ title: String, isOn: Bool, _ handler: @escaping () -> Void) -> NSMenuItem {
+        let item = item(title, handler)
+        item.state = isOn ? .on : .off
+        return item
     }
 
-    @objc private func selectSize(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let size = PetSize(rawValue: raw) else { return }
-        settings.size = size
+    private func choices<Option: Equatable>(
+        _ title: String,
+        _ options: [Option],
+        selected: Option,
+        title optionTitle: (Option) -> String,
+        _ select: @escaping (Option) -> Void
+    ) -> NSMenuItem {
+        let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        for option in options {
+            submenu.addItem(toggle(optionTitle(option), isOn: option == selected) { select(option) })
+        }
+        parent.submenu = submenu
+        return parent
     }
 
-    @objc private func selectSpeed(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let speed = PetSpeed(rawValue: raw) else { return }
-        settings.speed = speed
+    @objc private func runAction(_ sender: NSMenuItem) {
+        (sender.representedObject as? Action)?.handler()
     }
 
-    @objc private func toggleStayStill() {
-        settings.stayStill.toggle()
-    }
-
-    @objc private func toggleSounds() {
-        settings.soundEnabled.toggle()
-    }
-
-    @objc private func selectVolume(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let volume = SoundVolume(rawValue: raw) else { return }
-        settings.soundVolume = volume
-        pet.previewSound()
-    }
-
-    @objc private func toggleLaunchAtLogin() {
+    private func toggleLaunchAtLogin() {
         let service = SMAppService.mainApp
         do {
             if service.status == .enabled {
@@ -140,9 +129,5 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             NSApp.activate(ignoringOtherApps: true)
             alert.runModal()
         }
-    }
-
-    @objc private func quit() {
-        NSApp.terminate(nil)
     }
 }

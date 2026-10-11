@@ -15,4 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.pet = pet
         self.menuBar = menuBar
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        pet?.saveState()
+    }
 }

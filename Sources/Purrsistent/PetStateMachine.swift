@@ -1,7 +1,7 @@
 import Foundation
 
 enum PetState: String {
-    case idle, walkLeft, walkRight, sit, sleep, dragged, falling, happy
+    case idle, walkLeft, walkRight, sit, sleep, dragged, falling, happy, petted, yawn, groom, eating
 
     var isWalking: Bool { self == .walkLeft || self == .walkRight }
 }
@@ -13,8 +13,12 @@ final class PetStateMachine {
     private var duration: TimeInterval = 2
     private var awakeIdleTime: TimeInterval = 0
 
-    var sleepAfter: TimeInterval = 120
     var onStateChange: ((_ old: PetState, _ new: PetState) -> Void)?
+    /// Called when a state runs its full course, as opposed to being interrupted.
+    var onStateCompleted: ((PetState) -> Void)?
+
+    /// 0 (grumpy) to 1 (delighted); shifts the odds between lazing about and playing.
+    var mood: Double = 0.7
 
     var allowWalking = true {
         didSet {
@@ -25,7 +29,7 @@ final class PetStateMachine {
     func tick(_ dt: TimeInterval) {
         timeInState += dt
         switch state {
-        case .dragged, .falling:
+        case .dragged, .falling, .petted:
             return
         case .sleep:
             break
@@ -33,7 +37,9 @@ final class PetStateMachine {
             awakeIdleTime += dt
         }
         if timeInState >= duration {
+            let finished = state
             transition(to: chooseNext())
+            onStateCompleted?(finished)
         }
     }
 
@@ -65,6 +71,31 @@ final class PetStateMachine {
         transition(to: .idle)
     }
 
+    var canBePetted: Bool {
+        switch state {
+        case .dragged, .falling, .petted, .eating: false
+        default: true
+        }
+    }
+
+    func startPetting() {
+        guard canBePetted else { return }
+        noteInteraction()
+        transition(to: .petted)
+    }
+
+    func stopPetting() {
+        guard state == .petted else { return }
+        noteInteraction()
+        transition(to: .idle)
+    }
+
+    /// Plays a one-off action like a yawn, unless the pet is airborne.
+    func perform(_ action: PetState) {
+        guard state != .dragged, state != .falling else { return }
+        transition(to: action)
+    }
+
     /// Flips walking direction without restarting the current walk's duration.
     func turnAround() {
         let old = state
@@ -76,22 +107,35 @@ final class PetStateMachine {
         onStateChange?(old, state)
     }
 
+    static var isNightTime: Bool {
+        let hour = Calendar.current.component(.hour, from: Date())
+        return hour >= 22 || hour < 6
+    }
+
     private func chooseNext() -> PetState {
         if state == .sleep {
             awakeIdleTime = 0
             return .idle
         }
-        if awakeIdleTime >= sleepAfter {
+
+        let night = Self.isNightTime
+        if awakeIdleTime >= (night ? 45 : 120) {
             return .sleep
         }
 
         var options: [(state: PetState, weight: Double)] = [
             (.idle, state == .idle ? 15 : 30),
-            (.sit, state == .sit ? 5 : 15),
+            (.sit, (state == .sit ? 5 : 15) * (1.5 - mood)),
+            (.yawn, night ? 10 : 4),
+            (.groom, state == .groom ? 0 : 8),
         ]
         if allowWalking {
-            options.append((.walkLeft, 22))
-            options.append((.walkRight, 22))
+            let walkWeight = 22 * (0.5 + mood) * (night ? 0.5 : 1)
+            options.append((.walkLeft, walkWeight))
+            options.append((.walkRight, walkWeight))
+        }
+        if mood > 0.7 {
+            options.append((.happy, 6))
         }
         return weightedPick(options)
     }
@@ -119,9 +163,11 @@ final class PetStateMachine {
         case .idle: .random(in: 2...5)
         case .walkLeft, .walkRight: .random(in: 3...8)
         case .sit: .random(in: 4...10)
+        case .groom: .random(in: 3...5)
+        case .eating: 2
         case .sleep: .random(in: 60...180)
-        case .happy: 1.2
-        case .dragged, .falling: .infinity
+        case .happy, .yawn: 1.2
+        case .dragged, .falling, .petted: .infinity
         }
     }
 }

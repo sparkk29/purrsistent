@@ -5,10 +5,13 @@ enum Facing {
 }
 
 enum AnimationKey: String, CaseIterable {
-    case idle, walk, sit, sleep, drag, fall, happy
+    case idle, walk, sit, sleep, drag, fall, happy, petted, yawn, groom, eat
 
     var framesPerSecond: Double {
         switch self {
+        case .eat: 6
+        case .yawn: 5
+        case .groom: 4
         case .idle: 4
         case .walk: 8
         case .sit: 2
@@ -16,6 +19,7 @@ enum AnimationKey: String, CaseIterable {
         case .drag: 6
         case .fall: 6
         case .happy: 8
+        case .petted: 3
         }
     }
 }
@@ -30,25 +34,48 @@ extension PetState {
         case .dragged: .drag
         case .falling: .fall
         case .happy: .happy
+        case .petted: .petted
+        case .yawn: .yawn
+        case .groom: .groom
+        case .eating: .eat
         }
     }
 }
 
-/// Frames are looked up as `<key>_0.png, <key>_1.png, ...` or as a horizontal strip `<key>.png`
-/// made of square frames. Artwork faces right; left-facing frames are mirrored automatically.
+/// The `.custom` coat loads frames from the sprite directories, as `<key>_0.png, <key>_1.png, ...`
+/// or a horizontal strip `<key>.png` of square frames; anything missing falls back to the built-in cat.
+/// Artwork faces right; left-facing frames are mirrored automatically.
 @MainActor
 final class SpriteAnimator {
+    private let spriteDirectories: [URL]
     private var frames: [AnimationKey: [NSImage]] = [:]
     private var mirroredFrames: [AnimationKey: [NSImage]] = [:]
+    private(set) var coat: Coat?
     private(set) var current: AnimationKey = .idle
     private var frameIndex = 0
     private var elapsed: TimeInterval = 0
 
-    init(spriteDirectories: [URL] = SpriteAnimator.defaultSpriteDirectories()) {
+    init(coat: Coat, spriteDirectories: [URL] = SpriteAnimator.defaultSpriteDirectories()) {
+        self.spriteDirectories = spriteDirectories
+        load(coat: coat)
+    }
+
+    func load(coat: Coat) {
+        guard coat != self.coat else { return }
+        self.coat = coat
+        let palette = SpriteFactory.Palette.forCoat(coat)
         for key in AnimationKey.allCases {
-            let images = Self.loadFrames(for: key, from: spriteDirectories) ?? SpriteFactory.frames(for: key)
+            let custom = coat == .custom ? Self.loadFrames(for: key, from: spriteDirectories) : nil
+            let images = custom ?? SpriteFactory.frames(for: key, palette: palette)
             frames[key] = images
             mirroredFrames[key] = images.map(Self.mirrored)
+        }
+    }
+
+    nonisolated static func hasCustomSprites(in directories: [URL] = defaultSpriteDirectories()) -> Bool {
+        directories.contains { directory in
+            let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+            return files.contains { $0.lowercased().hasSuffix(".png") }
         }
     }
 

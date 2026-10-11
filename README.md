@@ -8,17 +8,25 @@
 
 ---
 
-Purrsistent is a native macOS desktop pet. A small animated cat strolls along the top of your Dock, naps, meows, and reacts when you poke or pick it up. It lives in a transparent, always-on-top window, so it stays out of your way: clicks on the empty space around it go straight through to the apps underneath.
+Purrsistent is a native macOS desktop pet. A small animated cat strolls along the top of your Dock, naps, grooms, meows, and reacts when you stroke it, poke it, or toss it across the screen. It lives in a transparent, always-on-top window, so it stays out of your way: clicks on the empty space around it go straight through to the apps underneath.
+
+<p align="center">
+  <img src="assets/coats.png" alt="Orange, Midnight, Silver, and Snowball coats" width="480">
+</p>
 
 ## Features
 
-- **Lives on your desktop**: walks along the top of the Dock (or the bottom of the screen), turns around at the edges, and shows up on every Space and over full-screen apps.
-- **Has a mind of its own**: idles, sits, and wanders at random, and dozes off after about 2 minutes without attention.
-- **Responds to you**: click it for a happy jump and a meow, or drag it anywhere and let go to watch it fall back down.
-- **Sounds**: meows, a surprised chirp when picked up, a thud on landing, and a soft purr while asleep.
+- **Lives on your desktop**: walks along the top of the Dock (or the bottom of the screen), wanders across to your other monitors, and shows up on every Space and over full-screen apps.
+- **Has a mind of its own**: idles, sits, grooms, yawns, and wanders at random. It dozes off after about 2 minutes without attention, and sooner late at night.
+- **Notices you**: turns to look at your cursor when it's nearby.
+- **Loves attention**: stroke it with the cursor and it closes its eyes and purrs. Click it for a happy hop and a meow.
+- **Throwable**: drag it and fling it. It flies, bounces off screen edges, and skids to a stop.
+- **Treats and mood**: give it a fish treat and it trots over to eat it. Its mood rises with attention and slowly fades when it's ignored, and a happier cat plays more.
+- **Break reminders**: optionally reminds you to stretch, drink water, or rest your eyes, in a little speech bubble.
+- **Coats**: Orange, Midnight, Silver, and Snowball, or your own artwork.
+- **Sounds**: real cat recordings for meows, a surprised chirp, and a soft purr, plus a thud on landing.
 - **Stays out of the way**: no Dock icon, and clicks on transparent pixels pass through.
-- **Menu bar controls**: everything is in the paw icon in the menu bar (or right-click the cat).
-- **Customizable**: replace the artwork and sounds with your own files without touching code.
+- **Menu bar controls**: everything is in the paw icon in the menu bar, or right-click the cat.
 
 ## Requirements
 
@@ -32,7 +40,7 @@ Purrsistent is a native macOS desktop pet. A small animated cat strolls along th
 open build/Purrsistent.app
 ```
 
-`bundle.sh` builds a release binary, generates the app icon, copies the sprites and sounds, and wraps everything into an ad-hoc signed `build/Purrsistent.app`. Move it to `/Applications` if you want to keep it.
+`bundle.sh` builds a release binary, generates the app icon, copies any custom sprites and the sounds, and wraps everything into an ad-hoc signed `build/Purrsistent.app`. Move it to `/Applications` if you want to keep it.
 
 For quick iteration during development you can also run it unbundled from the repo root:
 
@@ -44,34 +52,50 @@ swift run
 
 | Action | What happens |
 | --- | --- |
-| Click the cat | Happy jump and a meow |
-| Drag the cat | It dangles, then falls back down when released |
-| Right-click (or Control-click) the cat | Opens the settings menu |
-| Leave it alone for ~2 minutes | It falls asleep and purrs |
+| Move the cursor back and forth over the cat | It purrs and its mood goes up |
+| Click the cat | Happy hop and a meow |
+| Drag and release (or fling) the cat | It flies, bounces off edges, and lands with a thud |
+| Right-click (or Control-click) the cat | Opens the menu |
+| Click a speech bubble | Dismisses it |
+| Leave it alone for ~2 minutes | It falls asleep and purrs (after ~45 seconds at night) |
 
 The menu bar icon and the right-click menu offer the same options:
 
 - **Show / Hide Pet**
+- **Mood**: how the cat is feeling: Grumpy, Bored, Content, or Happy
+- **Give Treat**: drops a fish for the cat to find and eat
+- **Coat**: Orange, Midnight, Silver, Snowball, plus Custom when you've added your own sprites
 - **Size**: Small, Medium, Large
 - **Speed**: Slow, Normal, Fast
-- **Stay Still**: no walking, just idling, sitting, and sleeping
+- **Stay Still**: no wandering, just idling, sitting, grooming, and sleeping
 - **Sounds** on/off and **Volume**: Low, Medium, High
+- **Break Reminders**: Off, or every 25, 45, or 60 minutes
 - **Launch at Login**: only works from the bundled `.app`
 - **Quit**
 
-Settings are saved between launches.
+Settings and mood are saved between launches.
 
 ## Custom artwork and sounds
 
-Purrsistent ships with a placeholder cat and sounds that are drawn and synthesized in code. They're also exported as files in `Resources/`, and any files you put there take priority.
+Purrsistent's cat is drawn in code. Its sounds are real recordings in `Resources/Sounds/` (see [Credits](#credits)), with synthesized fallbacks built in, so it still works with no asset files at all. You can swap in your own.
 
 ### Sprites (`Resources/Sprites/`)
 
-Animations: `idle`, `walk`, `sit`, `sleep`, `drag`, `fall`, `happy`.
+Put PNGs in `Resources/Sprites/`, rebuild, and pick **Coat → Custom**.
+
+Animations: `idle`, `walk`, `sit`, `sleep`, `drag`, `fall`, `happy`, `petted`, `yawn`, `groom`, `eat`.
 
 - Use a PNG sequence (`walk_0.png`, `walk_1.png`, ...) or a single horizontal strip of square frames (`walk.png`).
+- Any animation you leave out falls back to the built-in cat.
 - Draw the character **facing right**. Left-facing frames are mirrored automatically.
 - Transparent pixels are click-through, so keep the background fully transparent.
+
+To start from the built-in cat, export its frames (optionally in another coat) and edit them:
+
+```bash
+swift build
+.build/debug/Purrsistent --export-sprites Resources/Sprites --coat silver
+```
 
 ### Sounds (`Resources/Sounds/`)
 
@@ -79,7 +103,8 @@ Effects: `meow`, `chirp`, `thud`, `purr`.
 
 - Supported formats: `.wav`, `.aiff`, `.caf`, `.mp3`, `.m4a`.
 - Add variations as `meow_0.wav`, `meow_1.wav`, ... and one is picked at random each time.
-- `purr` loops while the cat sleeps, so it should loop cleanly.
+- `purr` loops while the cat sleeps or is being stroked, so it should loop cleanly.
+- Any effect without a file falls back to a synthesized version.
 
 After changing assets, run `./scripts/bundle.sh` again.
 
@@ -87,8 +112,7 @@ After changing assets, run `./scripts/bundle.sh` again.
 
 ```bash
 swift build
-.build/debug/Purrsistent --export-sprites Resources/Sprites
-.build/debug/Purrsistent --export-sounds Resources/Sounds
+.build/debug/Purrsistent --export-sounds SynthesizedSounds   # synthesized fallback sounds, for reference
 .build/debug/Purrsistent --export-logo assets/logo.png
 ```
 
@@ -100,24 +124,40 @@ Sources/Purrsistent/
   AppDelegate.swift        Wires up the pet and the menu bar
   PetWindow.swift          Transparent, always-on-top panel
   PetView.swift            Draws the current frame, mouse handling, pixel hit-testing
-  PetController.swift      30 fps loop: movement, gravity, dragging, sound cues
+  PetController.swift      30 fps loop: movement, throwing, petting, treats, sound cues
   PetStateMachine.swift    Behaviors and weighted random transitions
+  Mood.swift               Persisted mood that fades over time
+  Treat.swift              The fish treat
+  BubbleWindow.swift       Speech bubble above the pet
+  BreakReminder.swift      Break reminder timer and messages
   SpriteAnimator.swift     Loads, mirrors, and steps through animation frames
-  SpriteFactory.swift      Draws the built-in placeholder cat
+  SpriteFactory.swift      Draws the built-in cat, its coats, and the treat
   SoundPlayer.swift        Loads and plays sound effects and loops
-  SoundFactory.swift       Synthesizes the built-in placeholder sounds
+  SoundFactory.swift       Synthesizes fallback sounds
   IconFactory.swift        Draws the app icon and logo
-  MenuBarController.swift  Menu bar icon and settings menu
+  MenuBarController.swift  Menu bar icon and menu
   Settings.swift           Persisted preferences
 Resources/
-  Sprites/                 Animation frames
-  Sounds/                  Sound effects
+  Sprites/                 Optional custom animation frames
+  Sounds/                  Cat recordings and the landing thud
 scripts/bundle.sh          Builds Purrsistent.app
-assets/logo.png            Logo used in this README
+assets/                    Logo and images used in this README
 ```
 
 ## Roadmap
 
-- Multiple monitors and walking on top of window title bars
-- Reacting to the cursor, time of day, and system events like low battery
-- More characters and a character picker
+- Walking on top of app windows and sitting on the menu bar
+- Reacting to system events like low battery
+- More animals, not just cats
+
+## Credits
+
+The cat sounds are real recordings. Each was trimmed, faded, and loudness-matched, and the purr was cut into a seamless loop.
+
+| Files | Source | Author | License |
+| --- | --- | --- | --- |
+| `meow_0`–`meow_3` | [Cat_meow.wav](https://freesound.org/people/cribbler/sounds/511448/) | cribbler | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `chirp_0`–`chirp_2` | [Cat Chirps.wav](https://freesound.org/people/Tyler31898/sounds/634174/) | Tyler31898 | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `purr_0` | [Purr (10 sec loopable).ogg](https://commons.wikimedia.org/wiki/File:Purr_(10_sec_loopable).ogg) | Insanejeff at English Wikipedia | Public domain |
+
+The landing `thud` is synthesized by `SoundFactory.swift`.

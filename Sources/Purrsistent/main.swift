@@ -17,10 +17,12 @@ func runExport(flag: String, defaultPath: String, label: String, _ export: (URL)
     }
 }
 
-runExport(flag: "--export-sprites", defaultPath: "Resources/Sprites", label: "placeholder sprites") {
-    try SpriteFactory.exportPNGs(to: $0)
+runExport(flag: "--export-sprites", defaultPath: "Resources/Sprites", label: "placeholder sprites") { url in
+    let coat = arguments.firstIndex(of: "--coat")
+        .flatMap { $0 + 1 < arguments.count ? Coat(rawValue: arguments[$0 + 1]) : nil } ?? .orange
+    try SpriteFactory.exportPNGs(to: url, palette: .forCoat(coat))
 }
-runExport(flag: "--export-sounds", defaultPath: "Resources/Sounds", label: "placeholder sounds") {
+runExport(flag: "--export-sounds", defaultPath: "SynthesizedSounds", label: "synthesized sounds") {
     try SoundFactory.exportWAVs(to: $0)
 }
 runExport(flag: "--export-iconset", defaultPath: "AppIcon.iconset", label: "app iconset") {

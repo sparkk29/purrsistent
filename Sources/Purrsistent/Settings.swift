@@ -42,6 +42,27 @@ enum SoundVolume: String, CaseIterable {
     var title: String { rawValue.capitalized }
 }
 
+enum Coat: String, CaseIterable {
+    case orange, midnight, silver, snowball, custom
+
+    var title: String { rawValue.capitalized }
+}
+
+enum BreakInterval: Int, CaseIterable {
+    case off = 0
+    case every25 = 25
+    case every45 = 45
+    case every60 = 60
+
+    var seconds: TimeInterval? {
+        self == .off ? nil : TimeInterval(rawValue * 60)
+    }
+
+    var title: String {
+        self == .off ? "Off" : "Every \(rawValue) min"
+    }
+}
+
 @MainActor
 final class Settings {
     static let shared = Settings()
@@ -52,6 +73,10 @@ final class Settings {
         static let stayStill = "stayStill"
         static let soundEnabled = "soundEnabled"
         static let soundVolume = "soundVolume"
+        static let breakInterval = "breakInterval"
+        static let coat = "coat"
+        static let moodValue = "moodValue"
+        static let moodDate = "moodDate"
     }
 
     private let defaults: UserDefaults
@@ -98,6 +123,34 @@ final class Settings {
         get { defaults.string(forKey: Keys.soundVolume).flatMap(SoundVolume.init(rawValue:)) ?? .medium }
         set {
             defaults.set(newValue.rawValue, forKey: Keys.soundVolume)
+            onChange?()
+        }
+    }
+
+    /// Persisted pet state rather than a preference, so it doesn't trigger `onChange`.
+    var savedMood: (value: Double, date: Date)? {
+        get {
+            guard let date = defaults.object(forKey: Keys.moodDate) as? Date else { return nil }
+            return (defaults.double(forKey: Keys.moodValue), date)
+        }
+        set {
+            defaults.set(newValue?.value, forKey: Keys.moodValue)
+            defaults.set(newValue?.date, forKey: Keys.moodDate)
+        }
+    }
+
+    var coat: Coat {
+        get { defaults.string(forKey: Keys.coat).flatMap(Coat.init(rawValue:)) ?? .orange }
+        set {
+            defaults.set(newValue.rawValue, forKey: Keys.coat)
+            onChange?()
+        }
+    }
+
+    var breakInterval: BreakInterval {
+        get { BreakInterval(rawValue: defaults.integer(forKey: Keys.breakInterval)) ?? .off }
+        set {
+            defaults.set(newValue.rawValue, forKey: Keys.breakInterval)
             onChange?()
         }
     }

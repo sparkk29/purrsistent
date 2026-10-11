@@ -79,7 +79,7 @@ enum IconFactory {
 
         let catScale: CGFloat = 12
         let catCenter = NSPoint(x: 27.5, y: 24.5)
-        SpriteFactory.draw(pose, in: NSRect(
+        SpriteFactory.draw(pose, palette: .orange, in: NSRect(
             x: 512 - catCenter.x * catScale,
             y: 500 - catCenter.y * catScale,
             width: 64 * catScale,
