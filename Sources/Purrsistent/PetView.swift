@@ -17,12 +17,19 @@ final class PetView: NSView {
         }
     }
 
+    /// Scales frames with nearest-neighbor sampling so pixel art stays crisp.
+    var pixelated = false {
+        didSet {
+            if pixelated != oldValue { needsDisplay = true }
+        }
+    }
+
     private static let opaqueAlphaThreshold: UInt8 = 70
 
     override var isOpaque: Bool { false }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSGraphicsContext.current?.imageInterpolation = .high
+        NSGraphicsContext.current?.imageInterpolation = pixelated ? .none : .high
         image?.draw(in: bounds)
     }
 

@@ -2,8 +2,10 @@ import Foundation
 
 enum PetState: String {
     case idle, walkLeft, walkRight, sit, sleep, dragged, falling, happy, petted, yawn, groom, eating
+    case stretch, scratch, knead, rollOver, loaf, pounceCrouch, leaping, tailChase
 
     var isWalking: Bool { self == .walkLeft || self == .walkRight }
+    var isAirborne: Bool { self == .dragged || self == .falling || self == .leaping }
 }
 
 @MainActor
@@ -29,7 +31,7 @@ final class PetStateMachine {
     func tick(_ dt: TimeInterval) {
         timeInState += dt
         switch state {
-        case .dragged, .falling, .petted:
+        case .dragged, .falling, .leaping, .petted:
             return
         case .sleep:
             break
@@ -62,19 +64,36 @@ final class PetStateMachine {
     }
 
     func startFalling() {
-        guard state != .dragged, state != .falling else { return }
+        guard !state.isAirborne else { return }
         transition(to: .falling)
     }
 
     func land() {
-        guard state == .falling else { return }
-        transition(to: .idle)
+        switch state {
+        case .falling: transition(to: .idle)
+        case .leaping: transition(to: .happy)
+        default: break
+        }
     }
 
     var canBePetted: Bool {
         switch state {
-        case .dragged, .falling, .petted, .eating: false
+        case .dragged, .falling, .leaping, .petted, .eating: false
         default: true
+        }
+    }
+
+    /// Crouches and wiggles, then leaps once the crouch finishes.
+    func pounce() {
+        guard Self.canPounce(from: state) else { return }
+        noteInteraction()
+        transition(to: .pounceCrouch)
+    }
+
+    static func canPounce(from state: PetState) -> Bool {
+        switch state {
+        case .idle, .sit, .walkLeft, .walkRight, .loaf: true
+        default: false
         }
     }
 
@@ -92,7 +111,7 @@ final class PetStateMachine {
 
     /// Plays a one-off action like a yawn, unless the pet is airborne.
     func perform(_ action: PetState) {
-        guard state != .dragged, state != .falling else { return }
+        guard !state.isAirborne else { return }
         transition(to: action)
     }
 
@@ -115,7 +134,10 @@ final class PetStateMachine {
     private func chooseNext() -> PetState {
         if state == .sleep {
             awakeIdleTime = 0
-            return .idle
+            return Double.random(in: 0..<1) < 0.7 ? .stretch : .idle
+        }
+        if state == .pounceCrouch {
+            return .leaping
         }
 
         let night = Self.isNightTime
@@ -128,6 +150,10 @@ final class PetStateMachine {
             (.sit, (state == .sit ? 5 : 15) * (1.5 - mood)),
             (.yawn, night ? 10 : 4),
             (.groom, state == .groom ? 0 : 8),
+            (.stretch, state == .stretch ? 0 : 3),
+            (.scratch, state == .scratch ? 0 : 4),
+            (.knead, state == .knead ? 0 : 1 + 6 * max(0, mood - 0.5)),
+            (.loaf, state == .loaf ? 0 : 6 * (1.3 - mood) * (night ? 1.5 : 1)),
         ]
         if allowWalking {
             let walkWeight = 22 * (0.5 + mood) * (night ? 0.5 : 1)
@@ -136,6 +162,10 @@ final class PetStateMachine {
         }
         if mood > 0.7 {
             options.append((.happy, 6))
+        }
+        if mood > 0.65 {
+            options.append((.rollOver, state == .rollOver ? 0 : 3))
+            if allowWalking { options.append((.tailChase, 1.5)) }
         }
         return weightedPick(options)
     }
@@ -167,7 +197,13 @@ final class PetStateMachine {
         case .eating: 2
         case .sleep: .random(in: 60...180)
         case .happy, .yawn: 1.2
-        case .dragged, .falling, .petted: .infinity
+        case .stretch: 2
+        case .scratch: .random(in: 1.5...2.5)
+        case .knead, .rollOver: .random(in: 3...6)
+        case .loaf: .random(in: 8...20)
+        case .pounceCrouch: 1
+        case .tailChase: .random(in: 2...3)
+        case .dragged, .falling, .leaping, .petted: .infinity
         }
     }
 }

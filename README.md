@@ -14,16 +14,22 @@ Purrsistent is a native macOS desktop pet. A small animated cat strolls along th
   <img src="assets/coats.png" alt="Orange, Midnight, Silver, and Snowball coats" width="480">
 </p>
 
+<p align="center">
+  <img src="assets/styles.png" alt="Cartoon, Pixel, Silhouette, and Anime styles" width="640">
+</p>
+
 ## Features
 
 - **Lives on your desktop**: walks along the top of the Dock (or the bottom of the screen), wanders across to your other monitors, and shows up on every Space and over full-screen apps.
-- **Has a mind of its own**: idles, sits, grooms, yawns, and wanders at random. It dozes off after about 2 minutes without attention, and sooner late at night.
-- **Notices you**: turns to look at your cursor when it's nearby.
+- **Has a mind of its own**: idles, sits, grooms, yawns, scratches an itch, and wanders at random. It loafs when it's bored, dozes off after about 2 minutes without attention (sooner late at night), and wakes up with a big stretch.
+- **Plays**: a happy cat kneads, rolls onto its back, and chases its own tail.
+- **Notices you**: turns to look at your cursor when it's nearby, and sometimes crouches, wiggles, and pounces at it.
 - **Loves attention**: stroke it with the cursor and it closes its eyes and purrs. Click it for a happy hop and a meow.
 - **Throwable**: drag it and fling it. It flies, bounces off screen edges, and skids to a stop.
 - **Treats and mood**: give it a fish treat and it trots over to eat it. Its mood rises with attention and slowly fades when it's ignored, and a happier cat plays more.
 - **Break reminders**: optionally reminds you to stretch, drink water, or rest your eyes, in a little speech bubble.
 - **Coats**: Orange, Midnight, Silver, and Snowball, or your own artwork.
+- **Styles**: Cartoon, Pixel (chunky 32×32 pixel art), Silhouette (a dark shape with glowing eyes), and Anime (a lankier, hand-drawn-looking cat with cel shading). Any style works with any coat.
 - **Sounds**: real cat recordings for meows, a surprised chirp, and a soft purr, plus a thud on landing. Pick a voice: Classic, Kitten, or Tomcat.
 - **Stays out of the way**: no Dock icon, and clicks on transparent pixels pass through.
 - **Menu bar controls**: everything is in the paw icon in the menu bar, or right-click the cat.
@@ -65,9 +71,10 @@ The menu bar icon and the right-click menu offer the same options:
 - **Mood**: how the cat is feeling: Grumpy, Bored, Content, or Happy
 - **Give Treat**: drops a fish for the cat to find and eat
 - **Coat**: Orange, Midnight, Silver, Snowball, plus Custom when you've added your own sprites
+- **Style**: Cartoon, Pixel, Silhouette, Anime (not available with the Custom coat)
 - **Size**: Small, Medium, Large
 - **Speed**: Slow, Normal, Fast
-- **Stay Still**: no wandering, just idling, sitting, grooming, and sleeping
+- **Stay Still**: no wandering, pouncing, or tail chasing; it still sits, grooms, stretches, loafs, and sleeps
 - **Sounds** on/off
 - **Voice**: Classic (a steady adult cat), Kitten (high, squeaky mews), Tomcat (a talkative tom), plus Custom when you've added your own sounds. Picking one plays a sample meow.
 - **Volume**: Low, Medium, High
@@ -85,18 +92,18 @@ Purrsistent's cat is drawn in code. Its sounds are real recordings in `Resources
 
 Put PNGs in `Resources/Sprites/`, rebuild, and pick **Coat → Custom**.
 
-Animations: `idle`, `walk`, `sit`, `sleep`, `drag`, `fall`, `happy`, `petted`, `yawn`, `groom`, `eat`.
+Animations: `idle`, `walk`, `sit`, `sleep`, `drag`, `fall`, `happy`, `petted`, `yawn`, `groom`, `eat`, `stretch`, `scratch`, `knead`, `rollOver`, `loaf`, `pounce` (the crouch and wiggle), `leap`, `tailChase`.
 
 - Use a PNG sequence (`walk_0.png`, `walk_1.png`, ...) or a single horizontal strip of square frames (`walk.png`).
 - Any animation you leave out falls back to the built-in cat.
 - Draw the character **facing right**. Left-facing frames are mirrored automatically.
 - Transparent pixels are click-through, so keep the background fully transparent.
 
-To start from the built-in cat, export its frames (optionally in another coat) and edit them:
+To start from the built-in cat, export its frames (optionally in another coat or style) and edit them:
 
 ```bash
 swift build
-.build/debug/Purrsistent --export-sprites Resources/Sprites --coat silver
+.build/debug/Purrsistent --export-sprites Resources/Sprites --coat silver --style anime
 ```
 
 ### Sounds (`Resources/Sounds/`)
@@ -135,7 +142,9 @@ Sources/Purrsistent/
   BubbleWindow.swift       Speech bubble above the pet
   BreakReminder.swift      Break reminder timer and messages
   SpriteAnimator.swift     Loads, mirrors, and steps through animation frames
-  SpriteFactory.swift      Draws the built-in cat, its coats, and the treat
+  SpriteFactory.swift      Draws the built-in cat, its coats and styles, and the treat
+  PixelArt.swift           Turns a vector drawing into pixel art
+  AnimeCatFactory.swift    Rigged anime cat: jointed legs, keyframed poses, cel shading
   SoundPlayer.swift        Loads and plays sound effects and loops
   SoundFactory.swift       Synthesizes fallback sounds
   IconFactory.swift        Draws the app icon and logo

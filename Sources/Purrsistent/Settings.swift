@@ -48,6 +48,12 @@ enum Coat: String, CaseIterable {
     var title: String { rawValue.capitalized }
 }
 
+enum ArtStyle: String, CaseIterable {
+    case cartoon, pixel, silhouette, anime
+
+    var title: String { rawValue.capitalized }
+}
+
 /// Which cat's meows and chirps to use. Each voice lives in `Resources/Sounds/<folder>/`.
 enum Voice: String, CaseIterable {
     case classic, kitten, tomcat, custom
@@ -84,6 +90,7 @@ final class Settings {
         static let voice = "voice"
         static let breakInterval = "breakInterval"
         static let coat = "coat"
+        static let style = "artStyle"
         static let moodValue = "moodValue"
         static let moodDate = "moodDate"
     }
@@ -160,6 +167,14 @@ final class Settings {
         get { defaults.string(forKey: Keys.coat).flatMap(Coat.init(rawValue:)) ?? .orange }
         set {
             defaults.set(newValue.rawValue, forKey: Keys.coat)
+            onChange?()
+        }
+    }
+
+    var style: ArtStyle {
+        get { defaults.string(forKey: Keys.style).flatMap(ArtStyle.init(rawValue:)) ?? .cartoon }
+        set {
+            defaults.set(newValue.rawValue, forKey: Keys.style)
             onChange?()
         }
     }

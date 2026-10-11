@@ -27,6 +27,7 @@ final class PetController: NSObject, PetViewDelegate {
     private var lastMouse: NSPoint = .zero
     private var strokeAmount: CGFloat = 0
     private var lastStrokeTime: TimeInterval = 0
+    private var lastPounceTime: TimeInterval = -.infinity
 
     private static let tickRate: TimeInterval = 1.0 / 30
     private static let baseWalkSpeed: CGFloat = 45
@@ -45,6 +46,11 @@ final class PetController: NSObject, PetViewDelegate {
     private static let pettingMoodPerSecond = 0.05
     private static let throwMoodBoost = 0.03
     private static let treatMoodBoost = 0.25
+    private static let pounceChancePerSecond = 0.3
+    private static let pounceCooldown: TimeInterval = 20
+    private static let pounceMinimumMood = 0.4
+    private static let leapSpeedUp: CGFloat = 700
+    private static let maxLeapSpeedSideways: CGFloat = 1000
 
     var contextMenuProvider: (() -> NSMenu?)?
 
@@ -55,13 +61,15 @@ final class PetController: NSObject, PetViewDelegate {
         let size = settings.size.points
         window = PetWindow(size: size)
         view = PetView(frame: NSRect(x: 0, y: 0, width: size, height: size))
-        animator = SpriteAnimator(coat: settings.coat)
+        animator = SpriteAnimator(coat: settings.coat, style: settings.style)
         sound = SoundPlayer(voice: settings.voice)
         mood = Mood(settings: settings)
         super.init()
 
         view.autoresizingMask = [.width, .height]
         view.delegate = self
+        view.pixelated = Self.isPixelated(settings)
+        animator.walkRate = Double(settings.speed.multiplier)
         window.contentView = view
 
         machine.allowWalking = !settings.stayStill
@@ -127,7 +135,7 @@ final class PetController: NSObject, PetViewDelegate {
         guard treat.hasLanded else { return }
 
         switch machine.state {
-        case .dragged, .falling, .petted, .happy, .eating:
+        case .dragged, .falling, .leaping, .pounceCrouch, .petted, .happy, .eating:
             return
         default:
             break
@@ -144,7 +152,11 @@ final class PetController: NSObject, PetViewDelegate {
     }
 
     private static func purrs(in state: PetState) -> Bool {
-        state == .sleep || state == .petted
+        state == .sleep || state == .petted || state == .knead
+    }
+
+    private static func isPixelated(_ settings: Settings) -> Bool {
+        settings.style == .pixel && settings.coat != .custom
     }
 
     private func handleStateChange(from old: PetState, to new: PetState) {
@@ -159,7 +171,9 @@ final class PetController: NSObject, PetViewDelegate {
         switch new {
         case .dragged:
             sound.play(.chirp, volume: 0.8)
-        case .sleep, .petted:
+        case .leaping:
+            launchPounce()
+        case .sleep, .petted, .knead:
             sound.startLoop(.purr, volume: Self.purrVolume)
         case .idle, .sit:
             if old != .falling, old != .sleep, old != .petted, Double.random(in: 0..<1) < Self.spontaneousMeowChance {
@@ -210,7 +224,9 @@ final class PetController: NSObject, PetViewDelegate {
         sound.masterVolume = settings.soundVolume.level
         sound.load(voice: settings.voice)
         reminder.interval = settings.breakInterval.seconds
-        animator.load(coat: settings.coat)
+        animator.load(coat: settings.coat, style: settings.style)
+        view.pixelated = Self.isPixelated(settings)
+        animator.walkRate = Double(settings.speed.multiplier)
         if isVisible, Self.purrs(in: machine.state) {
             sound.startLoop(.purr, volume: Self.purrVolume)
         }
@@ -238,6 +254,7 @@ final class PetController: NSObject, PetViewDelegate {
 
         machine.tick(dt)
         updatePetting(mouse: mouse, overPet: mouseOverPet, now: now, dt: dt)
+        considerPounce(mouse: mouse, overPet: mouseOverPet, now: now, dt: dt)
         updateTreat(dt)
         updatePosition(dt)
         faceCursor(mouse)
@@ -253,12 +270,39 @@ final class PetController: NSObject, PetViewDelegate {
     // MARK: - Cursor
 
     private func faceCursor(_ mouse: NSPoint) {
-        guard machine.state == .idle || machine.state == .sit else { return }
+        guard [.idle, .sit, .pounceCrouch].contains(machine.state) else { return }
         let frame = window.frame
         let dx = mouse.x - frame.midX
         let dy = mouse.y - frame.midY
         guard abs(dx) > frame.width * 0.1, hypot(dx, dy) < Self.cursorAwarenessRadius else { return }
         facing = dx < 0 ? .left : .right
+    }
+
+    /// A cursor lingering near the pet, at about its height, sometimes gets pounced on.
+    private func considerPounce(mouse: NSPoint, overPet: Bool, now: TimeInterval, dt: TimeInterval) {
+        guard machine.allowWalking, treat == nil, !overPet, !isPressing,
+              mood.value > Self.pounceMinimumMood,
+              now - lastPounceTime > Self.pounceCooldown,
+              PetStateMachine.canPounce(from: machine.state) else { return }
+        let frame = window.frame
+        let dx = mouse.x - frame.midX
+        let dy = mouse.y - frame.minY
+        guard abs(dx) > frame.width * 0.6, abs(dx) < Self.cursorAwarenessRadius,
+              dy > -frame.height * 0.2, dy < frame.height * 2 else { return }
+        guard Double.random(in: 0..<1) < Self.pounceChancePerSecond * dt else { return }
+        lastPounceTime = now
+        facing = dx < 0 ? .left : .right
+        machine.pounce()
+    }
+
+    private func launchPounce() {
+        let frame = window.frame
+        let mouse = NSEvent.mouseLocation
+        let flightTime = 2 * Self.leapSpeedUp / Self.gravity
+        let dx = (mouse.x - frame.midX) / flightTime
+        velocity = CGVector(dx: min(max(dx, -Self.maxLeapSpeedSideways), Self.maxLeapSpeedSideways), dy: Self.leapSpeedUp)
+        if abs(velocity.dx) > 30 { facing = velocity.dx < 0 ? .left : .right }
+        sound.play(.chirp, volume: 0.6)
     }
 
     /// Stroking is detected as cursor movement over the pet's opaque pixels without a click.
@@ -293,8 +337,9 @@ final class PetController: NSObject, PetViewDelegate {
         let ground = bounds.minY
         let dt = CGFloat(dt)
 
+        let airborne = machine.state == .falling || machine.state == .leaping
         switch machine.state {
-        case .falling:
+        case .falling, .leaping:
             velocity.dy -= Self.gravity * dt
             frame.origin.x += velocity.dx * dt
             frame.origin.y += velocity.dy * dt
@@ -317,7 +362,7 @@ final class PetController: NSObject, PetViewDelegate {
             break
         }
 
-        if machine.state != .falling {
+        if !airborne {
             if velocity.dx != 0 {
                 frame.origin.x += velocity.dx * dt
                 let slowdown = Self.groundFriction * dt

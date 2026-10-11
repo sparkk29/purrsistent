@@ -2,7 +2,7 @@ import AppKit
 
 /// Draws the built-in placeholder cat. All geometry is in a 64x64 unit canvas, facing right.
 enum SpriteFactory {
-    enum EyeStyle { case open, blink, closed, happy, wide }
+    enum EyeStyle { case open, half, blink, closed, happy, wide }
     enum MouthStyle { case smile, open, small, yawn }
 
     struct Pose {
@@ -21,6 +21,22 @@ enum SpriteFactory {
         var tailWag: CGFloat = 0
         /// When set, a front paw is raised to the face, lifted by this amount.
         var pawRaised: CGFloat?
+        /// Degrees counter-clockwise around the bottom center of the body; negative tips the nose down.
+        var rotation: CGFloat = 0
+        /// Mirrors the figure, so frames can turn around mid-animation.
+        var flipped = false
+        /// Belly up with the paws in the air.
+        var upsideDown = false
+        /// Paws hidden under the body, like a loaf of bread.
+        var tuckedPaws = false
+        /// Front paws stretched out ahead of the body, this high above its bottom.
+        var reach: CGFloat?
+        /// How far the back foot is stretched out behind.
+        var backLegExtend: CGFloat = 0
+        /// When set, a hind paw is raised to the ear, offset by this amount.
+        var scratchPaw: CGFloat?
+        /// Front paws pressing in turn; each value lifts one paw.
+        var knead: (CGFloat, CGFloat)?
     }
 
     struct Palette {
@@ -31,12 +47,23 @@ enum SpriteFactory {
         var ink: NSColor
         /// Iris color for open eyes; nil draws solid dark eyes.
         var iris: NSColor?
+        /// Tabby stripes, used by the anime cat.
+        var stripes: NSColor?
+
+        /// Eye color for the glowing silhouette eyes.
+        var glow: NSColor { iris ?? NSColor(calibratedRed: 1, green: 0.76, blue: 0.28, alpha: 1) }
+        var silhouette: NSColor { fur.blended(withFraction: 0.82, of: .black) ?? fur }
+        var rimLight: NSColor {
+            let brightness = fur.usingColorSpace(.deviceRGB)?.brightnessComponent ?? 1
+            return brightness < 0.4 ? fur.blended(withFraction: 0.45, of: .white) ?? fur : fur
+        }
 
         static let orange = Palette(
             fur: NSColor(calibratedRed: 0.96, green: 0.68, blue: 0.38, alpha: 1),
             belly: NSColor(calibratedRed: 0.99, green: 0.86, blue: 0.68, alpha: 1),
             outline: NSColor(calibratedRed: 0.45, green: 0.27, blue: 0.12, alpha: 1),
-            ink: NSColor(calibratedWhite: 0.15, alpha: 1)
+            ink: NSColor(calibratedWhite: 0.15, alpha: 1),
+            stripes: NSColor(calibratedRed: 0.84, green: 0.5, blue: 0.24, alpha: 1)
         )
         static let midnight = Palette(
             fur: NSColor(calibratedRed: 0.2, green: 0.2, blue: 0.24, alpha: 1),
@@ -50,7 +77,8 @@ enum SpriteFactory {
             belly: NSColor(calibratedRed: 0.91, green: 0.92, blue: 0.94, alpha: 1),
             outline: NSColor(calibratedRed: 0.3, green: 0.32, blue: 0.36, alpha: 1),
             ink: NSColor(calibratedWhite: 0.15, alpha: 1),
-            iris: NSColor(calibratedRed: 0.35, green: 0.62, blue: 0.88, alpha: 1)
+            iris: NSColor(calibratedRed: 0.35, green: 0.62, blue: 0.88, alpha: 1),
+            stripes: NSColor(calibratedRed: 0.52, green: 0.54, blue: 0.59, alpha: 1)
         )
         static let snowball = Palette(
             fur: NSColor(calibratedRed: 0.98, green: 0.98, blue: 0.97, alpha: 1),
@@ -199,22 +227,158 @@ enum SpriteFactory {
                 pose.tailWag = i.isMultiple(of: 2) ? 3 : 5
                 return pose
             }
-        }
-    }
-
-    static func frames(for key: AnimationKey, palette: Palette = .orange) -> [NSImage] {
-        poses(for: key).map { pose in
-            NSImage(size: imageSize, flipped: false) { rect in
-                draw(pose, palette: palette, in: rect)
-                return true
+        case .stretch:
+            // Bow with the front paws reaching forward, then shift forward onto a back-leg stretch.
+            let rotations: [CGFloat] = [0, -8, -14, -14, -14, 0, 4, 0]
+            let squashX: [CGFloat] = [1, 1.1, 1.22, 1.24, 1.22, 1.14, 1.2, 1]
+            let extend: [CGFloat] = [0, 0, 0, 0, 0, 4, 7, 0]
+            return (0..<8).map { i in
+                var pose = Pose()
+                pose.rotation = rotations[i]
+                pose.squashX = squashX[i]
+                pose.squashY = 2 - squashX[i] * 0.9 - 0.1
+                if (1...4).contains(i) {
+                    pose.reach = 0
+                    pose.backFootLift = -2
+                    pose.tailWag = 5
+                }
+                pose.backLegExtend = extend[i]
+                pose.eyes = (1...6).contains(i) ? .closed : .open
+                pose.mouth = i == 3 ? .open : (i == 0 || i == 7 ? .smile : .small)
+                return pose
+            }
+        case .scratch:
+            let offsets: [CGFloat] = [0, 2.5, 0.5, 3]
+            return (0..<4).map { i in
+                var pose = Pose()
+                pose.squashX = 1.08
+                pose.squashY = 0.92
+                pose.rotation = 6
+                pose.eyes = .closed
+                pose.mouth = .small
+                pose.scratchPaw = offsets[i]
+                pose.tailWag = 3
+                return pose
+            }
+        case .knead:
+            let presses: [(CGFloat, CGFloat)] = [(0, 3), (1.5, 1.5), (3, 0), (1.5, 1.5)]
+            return (0..<4).map { i in
+                var pose = Pose()
+                pose.squashX = 1.04
+                pose.squashY = 0.96
+                pose.eyes = .half
+                pose.mouth = .small
+                pose.blush = true
+                pose.knead = presses[i]
+                pose.tailWag = i < 2 ? 2 : 3
+                return pose
+            }
+        case .rollOver:
+            let paws: [(CGFloat, CGFloat)] = [(-1, -4), (-3, -2), (-4, -1), (-2, -3)]
+            return (0..<4).map { i in
+                var pose = Pose()
+                pose.upsideDown = true
+                pose.lift = 6
+                pose.squashX = 1.1
+                pose.squashY = 0.9
+                pose.eyes = i == 3 ? .blink : .open
+                pose.mouth = .small
+                pose.blush = true
+                pose.backFootLift = paws[i].0
+                pose.frontFootLift = paws[i].1
+                pose.tailWag = CGFloat(i % 2) * 2 + 1
+                return pose
+            }
+        case .loaf:
+            let eyes: [EyeStyle] = [.half, .half, .half, .closed, .closed, .half]
+            return (0..<6).map { i in
+                var pose = Pose()
+                pose.tuckedPaws = true
+                pose.lift = -2
+                pose.squashX = 1.15
+                pose.squashY = i == 2 ? 0.86 : 0.85
+                pose.eyes = eyes[i]
+                pose.mouth = .small
+                pose.tailWag = 1
+                return pose
+            }
+        case .pounce:
+            let wiggle: [CGFloat] = [2, -2, 2, -2]
+            return (0..<4).map { i in
+                var pose = Pose()
+                pose.squashX = 1.15
+                pose.squashY = 0.8
+                pose.lift = -1
+                pose.rotation = wiggle[i]
+                pose.backFootLift = i.isMultiple(of: 2) ? 1 : 0
+                pose.tailWag = i.isMultiple(of: 2) ? 0 : 4
+                pose.mouth = .small
+                return pose
+            }
+        case .leap:
+            return (0..<2).map { i in
+                var pose = Pose()
+                pose.squashX = 1.1
+                pose.squashY = 0.88
+                pose.rotation = 8
+                pose.reach = 6
+                pose.backLegExtend = 6
+                pose.showShadow = false
+                pose.eyes = .wide
+                pose.mouth = .open
+                pose.tailWag = i == 0 ? 0 : 3
+                return pose
+            }
+        case .tailChase:
+            let hops: [CGFloat] = [0, 3, 1, 0, 0, 3, 1, 0]
+            return (0..<8).map { i in
+                var pose = Pose()
+                pose.flipped = (i / 2).isMultiple(of: 2) == false
+                pose.lift = hops[i]
+                pose.rotation = i.isMultiple(of: 2) ? 8 : -4
+                pose.squashX = 0.95
+                pose.squashY = 1.05
+                pose.eyes = .wide
+                pose.mouth = .open
+                pose.tailWag = 5
+                pose.backFootLift = i.isMultiple(of: 2) ? 2 : 0
+                return pose
             }
         }
     }
 
-    static func exportPNGs(to directory: URL, palette: Palette = .orange, pixelSize: Int = 256) throws {
+    static func frames(for key: AnimationKey, palette: Palette = .orange, style: ArtStyle = .cartoon) -> [NSImage] {
+        switch style {
+        case .anime:
+            return AnimeCatFactory.frames(for: key, palette: palette)
+        case .pixel:
+            return poses(for: key).map { pose in
+                PixelArt.render(gridSize: 32, outline: palette.outline, keyColor: palette.fur) { rect in
+                    draw(pose, palette: palette, in: rect)
+                }
+            }
+        case .cartoon, .silhouette:
+            return poses(for: key).map { pose in
+                NSImage(size: imageSize, flipped: false) { rect in
+                    if style == .silhouette {
+                        drawSilhouette(pose, palette: palette, in: rect)
+                    } else {
+                        draw(pose, palette: palette, in: rect)
+                    }
+                    return true
+                }
+            }
+        }
+    }
+
+    static func framesPerSecond(for key: AnimationKey, style: ArtStyle) -> Double {
+        style == .anime ? AnimeCatFactory.framesPerSecond(for: key) : key.framesPerSecond
+    }
+
+    static func exportPNGs(to directory: URL, palette: Palette = .orange, style: ArtStyle = .cartoon, pixelSize: Int = 256) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         for key in AnimationKey.allCases {
-            for (index, pose) in poses(for: key).enumerated() {
+            for (index, image) in frames(for: key, palette: palette, style: style).enumerated() {
                 guard let rep = NSBitmapImageRep(
                     bitmapDataPlanes: nil,
                     pixelsWide: pixelSize,
@@ -230,7 +394,8 @@ enum SpriteFactory {
 
                 NSGraphicsContext.saveGraphicsState()
                 NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-                draw(pose, palette: palette, in: NSRect(x: 0, y: 0, width: pixelSize, height: pixelSize))
+                NSGraphicsContext.current?.imageInterpolation = style == .pixel ? .none : .high
+                image.draw(in: NSRect(x: 0, y: 0, width: pixelSize, height: pixelSize))
                 NSGraphicsContext.restoreGraphicsState()
 
                 if let data = rep.representation(using: .png, properties: [:]) {
@@ -241,20 +406,87 @@ enum SpriteFactory {
     }
 
     static func draw(_ pose: Pose, palette: Palette = .orange, in rect: NSRect) {
+        withCanvas(rect) { _ in
+            drawShadow(pose)
+            drawFigure(pose, palette: palette, layer: .full)
+            if pose.zCount > 0 { drawZs(count: pose.zCount, color: snoreInk) }
+        }
+    }
+
+    /// A dark, coat-tinted cat with a thin rim light and glowing eyes.
+    static func drawSilhouette(_ pose: Pose, palette: Palette, in rect: NSRect) {
+        withCanvas(rect) { context in
+            drawShadow(pose)
+            let layers: [(color: NSColor, offset: CGFloat)] = [(palette.rimLight, 0.9), (palette.silhouette, 0)]
+            for layer in layers {
+                context.saveGState()
+                context.translateBy(x: -layer.offset, y: layer.offset)
+                context.beginTransparencyLayer(auxiliaryInfo: nil)
+                drawFigure(pose, palette: palette, layer: .shape)
+                context.setBlendMode(.sourceIn)
+                context.setFillColor(layer.color.cgColor)
+                context.fill(CGRect(x: -8, y: -8, width: canvas + 16, height: canvas + 16))
+                context.endTransparencyLayer()
+                context.restoreGState()
+            }
+            drawFigure(pose, palette: palette, layer: .glowEyes(palette.glow))
+            if pose.zCount > 0 { drawZs(count: pose.zCount, color: palette.glow.withAlphaComponent(0.85)) }
+        }
+    }
+
+    private enum Layer {
+        case full
+        /// Just the outline of the body, for recoloring.
+        case shape
+        /// Only the eyes, glowing in the given color.
+        case glowEyes(NSColor)
+    }
+
+    private static func withCanvas(_ rect: NSRect, _ draw: (CGContext) -> Void) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
         context.saveGState()
+        defer { context.restoreGState() }
         context.translateBy(x: rect.minX, y: rect.minY)
         context.scaleBy(x: rect.width / canvas, y: rect.height / canvas)
+        draw(context)
+    }
+
+    private static func bodyRect(for pose: Pose) -> NSRect {
+        let width = 40 * pose.squashX
+        let height = 30 * pose.squashY
+        return NSRect(x: 32 - width / 2, y: 8 + pose.lift, width: width, height: height)
+    }
+
+    private static func drawShadow(_ pose: Pose) {
+        guard pose.showShadow else { return }
+        let width = 34 * max(0.5, 1 - max(0, pose.lift) / 16)
+        NSColor.black.withAlphaComponent(0.18).setFill()
+        NSBezierPath(ovalIn: NSRect(x: 32 - width / 2, y: 3, width: width, height: 5)).fill()
+    }
+
+    private static func drawFigure(_ pose: Pose, palette: Palette, layer: Layer) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let body = bodyRect(for: pose)
+
+        context.saveGState()
         defer { context.restoreGState() }
+        if pose.flipped {
+            context.translateBy(x: canvas, y: 0)
+            context.scaleBy(x: -1, y: 1)
+        }
+        if pose.rotation != 0 {
+            context.translateBy(x: body.midX, y: body.minY)
+            context.rotate(by: pose.rotation * .pi / 180)
+            context.translateBy(x: -body.midX, y: -body.minY)
+        }
+        if pose.upsideDown {
+            context.translateBy(x: 0, y: body.midY * 2)
+            context.scaleBy(x: 1, y: -1)
+        }
 
-        let bodyWidth = 40 * pose.squashX
-        let bodyHeight = 30 * pose.squashY
-        let body = NSRect(x: 32 - bodyWidth / 2, y: 8 + pose.lift, width: bodyWidth, height: bodyHeight)
-
-        if pose.showShadow {
-            let width = 34 * max(0.5, 1 - pose.lift / 16)
-            NSColor.black.withAlphaComponent(0.18).setFill()
-            NSBezierPath(ovalIn: NSRect(x: 32 - width / 2, y: 3, width: width, height: 5)).fill()
+        if case .glowEyes(let color) = layer {
+            drawGlowEyes(body: body, pose: pose, color: color)
+            return
         }
 
         drawTail(body: body, wag: pose.tailWag, palette: palette)
@@ -267,18 +499,20 @@ enum SpriteFactory {
         bodyPath.fill()
         palette.belly.setFill()
         NSBezierPath(ovalIn: NSRect(
-            x: body.midX - bodyWidth * 0.22 + 2,
+            x: body.midX - body.width * 0.22 + 2,
             y: body.minY + 2,
-            width: bodyWidth * 0.44,
-            height: bodyHeight * 0.4
+            width: body.width * 0.44,
+            height: body.height * 0.4
         )).fill()
         palette.outline.setStroke()
         bodyPath.lineWidth = 1.5
         bodyPath.stroke()
 
-        drawFace(body: body, pose: pose, palette: palette)
+        if case .full = layer { drawFace(body: body, pose: pose, palette: palette) }
         if let pawLift = pose.pawRaised { drawRaisedPaw(body: body, lift: pawLift, palette: palette) }
-        if pose.zCount > 0 { drawZs(count: pose.zCount) }
+        if let offset = pose.scratchPaw {
+            fillAndOutline(NSBezierPath(ovalIn: NSRect(x: body.minX + 1, y: body.maxY - 13 + offset, width: 9, height: 8)), palette)
+        }
     }
 
     private static func fillAndOutline(_ path: NSBezierPath, _ palette: Palette) {
@@ -290,6 +524,12 @@ enum SpriteFactory {
     }
 
     private static func drawTail(body: NSRect, wag: CGFloat, palette: Palette) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        // Wide poses would push the tail off the canvas, so tuck it in.
+        let shift = max(0, 11 - body.minX)
+        context.saveGState()
+        defer { context.restoreGState() }
+        context.translateBy(x: shift, y: 0)
         let tail = NSBezierPath()
         tail.move(to: NSPoint(x: body.minX + 5, y: body.minY + 8))
         tail.curve(
@@ -307,13 +547,26 @@ enum SpriteFactory {
     }
 
     private static func drawFeet(body: NSRect, pose: Pose, palette: Palette) {
+        guard !pose.tuckedPaws else { return }
         let baseY = body.minY - (pose.dangling ? 5 : 2)
-        let feet: [(x: CGFloat, lift: CGFloat)] = [
-            (body.midX - 9, pose.backFootLift),
-            (body.midX + 9, pose.frontFootLift),
-        ]
+        var feet: [NSRect] = []
+        if pose.scratchPaw == nil {
+            let extend = pose.backLegExtend
+            feet.append(NSRect(x: body.midX - 14 - extend, y: baseY + pose.backFootLift + extend * 0.15, width: 10 + extend * 0.6, height: 6))
+        }
+        if let knead = pose.knead {
+            feet.append(NSRect(x: body.midX + 2, y: baseY + knead.0, width: 9, height: 6))
+            feet.append(NSRect(x: body.midX + 10, y: baseY + knead.1, width: 9, height: 6))
+        } else if pose.reach == nil {
+            feet.append(NSRect(x: body.midX + 4, y: baseY + pose.frontFootLift, width: 10, height: 6))
+        }
+        if let reach = pose.reach {
+            for (index, dx) in [CGFloat(0), 4].enumerated() {
+                feet.append(NSRect(x: body.maxX - 13 + dx, y: body.minY + reach - CGFloat(index), width: 11, height: 5.5))
+            }
+        }
         for foot in feet {
-            fillAndOutline(NSBezierPath(ovalIn: NSRect(x: foot.x - 5, y: baseY + foot.lift, width: 10, height: 6)), palette)
+            fillAndOutline(NSBezierPath(ovalIn: foot), palette)
         }
     }
 
@@ -349,12 +602,31 @@ enum SpriteFactory {
         }
     }
 
+    private static func eyePositions(body: NSRect) -> (y: CGFloat, xs: [CGFloat]) {
+        (body.minY + body.height * 0.58, [body.midX - 3, body.midX + 9])
+    }
+
     private static func drawFace(body: NSRect, pose: Pose, palette: Palette) {
-        let eyeY = body.minY + body.height * 0.58
-        let eyeXs = [body.midX - 3, body.midX + 9]
+        let (eyeY, eyeXs) = eyePositions(body: body)
 
         for x in eyeXs {
             switch pose.eyes {
+            case .half:
+                let lidY = eyeY - 0.8
+                NSGraphicsContext.saveGraphicsState()
+                NSRect(x: x - 3, y: eyeY - 4, width: 6, height: lidY - (eyeY - 4)).clip()
+                (palette.iris ?? pupil).setFill()
+                NSBezierPath(ovalIn: NSRect(x: x - 2.2, y: eyeY - 3, width: 4.4, height: 6)).fill()
+                if palette.iris != nil {
+                    pupil.setFill()
+                    NSBezierPath(ovalIn: NSRect(x: x - 0.7, y: eyeY - 2.4, width: 1.4, height: 4.8)).fill()
+                }
+                NSGraphicsContext.restoreGraphicsState()
+                let lid = NSBezierPath()
+                lid.move(to: NSPoint(x: x - 2.8, y: lidY - 0.4))
+                lid.curve(to: NSPoint(x: x + 2.8, y: lidY - 0.4), controlPoint1: NSPoint(x: x - 1.2, y: lidY + 0.5), controlPoint2: NSPoint(x: x + 1.2, y: lidY + 0.5))
+                lid.lineCapStyle = .round
+                stroke(lid, palette.ink, width: 1.1)
             case .open:
                 let eye = NSRect(x: x - 2.2, y: eyeY - 3, width: 4.4, height: 6)
                 if let iris = palette.iris {
@@ -420,12 +692,54 @@ enum SpriteFactory {
         }
     }
 
-    private static func drawZs(count: Int) {
+    private static func drawGlowEyes(body: NSRect, pose: Pose, color: NSColor) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let (eyeY, eyeXs) = eyePositions(body: body)
+        let unit = hypot(context.ctm.a, context.ctm.b)
+        context.setShadow(offset: .zero, blur: 3 * unit, color: color.cgColor)
+        color.setFill()
+        for x in eyeXs {
+            switch pose.eyes {
+            case .open:
+                NSBezierPath(ovalIn: NSRect(x: x - 2.4, y: eyeY - 2.6, width: 4.8, height: 5.2)).fill()
+                pupil.setFill()
+                NSBezierPath(ovalIn: NSRect(x: x - 0.6, y: eyeY - 2.1, width: 1.2, height: 4.2)).fill()
+                color.setFill()
+            case .wide:
+                NSBezierPath(ovalIn: NSRect(x: x - 3.2, y: eyeY - 3.2, width: 6.4, height: 6.4)).fill()
+                pupil.setFill()
+                NSBezierPath(ovalIn: NSRect(x: x - 1.1, y: eyeY - 1.1, width: 2.2, height: 2.2)).fill()
+                color.setFill()
+            case .half:
+                let eye = NSBezierPath()
+                eye.move(to: NSPoint(x: x - 2.6, y: eyeY))
+                eye.curve(to: NSPoint(x: x + 2.6, y: eyeY), controlPoint1: NSPoint(x: x - 2.4, y: eyeY - 3), controlPoint2: NSPoint(x: x + 2.4, y: eyeY - 3))
+                eye.close()
+                eye.fill()
+            case .blink, .closed:
+                let lid = NSBezierPath()
+                lid.move(to: NSPoint(x: x - 3, y: eyeY))
+                lid.curve(to: NSPoint(x: x + 3, y: eyeY), controlPoint1: NSPoint(x: x - 1, y: eyeY - 2), controlPoint2: NSPoint(x: x + 1, y: eyeY - 2))
+                lid.lineCapStyle = .round
+                stroke(lid, color, width: 1.3)
+            case .happy:
+                let arc = NSBezierPath()
+                arc.move(to: NSPoint(x: x - 3, y: eyeY - 1.5))
+                arc.line(to: NSPoint(x: x, y: eyeY + 1.5))
+                arc.line(to: NSPoint(x: x + 3, y: eyeY - 1.5))
+                arc.lineCapStyle = .round
+                arc.lineJoinStyle = .round
+                stroke(arc, color, width: 1.3)
+            }
+        }
+    }
+
+    private static func drawZs(count: Int, color: NSColor) {
         for index in 0..<count {
             let size = 7 + CGFloat(index) * 2
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: size, weight: .heavy),
-                .foregroundColor: snoreInk,
+                .foregroundColor: color,
             ]
             NSAttributedString(string: "z", attributes: attributes)
                 .draw(at: NSPoint(x: 45 + CGFloat(index) * 5, y: 38 + CGFloat(index) * 7))

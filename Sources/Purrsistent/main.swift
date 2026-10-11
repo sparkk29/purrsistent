@@ -17,10 +17,15 @@ func runExport(flag: String, defaultPath: String, label: String, _ export: (URL)
     }
 }
 
+/// The value following `flag`, if any.
+func option(_ flag: String) -> String? {
+    arguments.firstIndex(of: flag).flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil }
+}
+
 runExport(flag: "--export-sprites", defaultPath: "Resources/Sprites", label: "placeholder sprites") { url in
-    let coat = arguments.firstIndex(of: "--coat")
-        .flatMap { $0 + 1 < arguments.count ? Coat(rawValue: arguments[$0 + 1]) : nil } ?? .orange
-    try SpriteFactory.exportPNGs(to: url, palette: .forCoat(coat))
+    let coat = option("--coat").flatMap(Coat.init(rawValue:)) ?? .orange
+    let style = option("--style").flatMap(ArtStyle.init(rawValue:)) ?? .cartoon
+    try SpriteFactory.exportPNGs(to: url, palette: .forCoat(coat), style: style)
 }
 runExport(flag: "--export-sounds", defaultPath: "SynthesizedSounds", label: "synthesized sounds") {
     try SoundFactory.exportWAVs(to: $0)

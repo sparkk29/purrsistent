@@ -6,7 +6,10 @@ enum Facing {
 
 enum AnimationKey: String, CaseIterable {
     case idle, walk, sit, sleep, drag, fall, happy, petted, yawn, groom, eat
+    case stretch, scratch, knead, rollOver, loaf, pounce, leap, tailChase
 
+    /// Frame rate of the built-in cartoon frames. One-shot animations (yawn, stretch) last
+    /// exactly as long as their state does.
     var framesPerSecond: Double {
         switch self {
         case .eat: 6
@@ -20,6 +23,14 @@ enum AnimationKey: String, CaseIterable {
         case .fall: 6
         case .happy: 8
         case .petted: 3
+        case .stretch: 4
+        case .scratch: 12
+        case .knead: 4
+        case .rollOver: 3
+        case .loaf: 2
+        case .pounce: 8
+        case .leap: 6
+        case .tailChase: 10
         }
     }
 }
@@ -38,6 +49,14 @@ extension PetState {
         case .yawn: .yawn
         case .groom: .groom
         case .eating: .eat
+        case .stretch: .stretch
+        case .scratch: .scratch
+        case .knead: .knead
+        case .rollOver: .rollOver
+        case .loaf: .loaf
+        case .pounceCrouch: .pounce
+        case .leaping: .leap
+        case .tailChase: .tailChase
         }
     }
 }
@@ -50,26 +69,34 @@ final class SpriteAnimator {
     private let spriteDirectories: [URL]
     private var frames: [AnimationKey: [NSImage]] = [:]
     private var mirroredFrames: [AnimationKey: [NSImage]] = [:]
-    private(set) var coat: Coat?
+    private var framesPerSecond: [AnimationKey: Double] = [:]
+    private var loaded: (coat: Coat, style: ArtStyle)?
     private(set) var current: AnimationKey = .idle
     private var frameIndex = 0
     private var elapsed: TimeInterval = 0
+    /// Speeds up the walk cycle along with the walking speed, so feet don't slide.
+    var walkRate: Double = 1
 
-    init(coat: Coat, spriteDirectories: [URL] = SpriteAnimator.defaultSpriteDirectories()) {
+    init(coat: Coat, style: ArtStyle, spriteDirectories: [URL] = SpriteAnimator.defaultSpriteDirectories()) {
         self.spriteDirectories = spriteDirectories
-        load(coat: coat)
+        load(coat: coat, style: style)
     }
 
-    func load(coat: Coat) {
-        guard coat != self.coat else { return }
-        self.coat = coat
+    /// The Custom coat uses its PNGs as-is, so the style only applies to the built-in cat.
+    func load(coat: Coat, style: ArtStyle) {
+        guard loaded?.coat != coat || loaded?.style != style else { return }
+        loaded = (coat, style)
         let palette = SpriteFactory.Palette.forCoat(coat)
+        let builtInStyle: ArtStyle = coat == .custom ? .cartoon : style
         for key in AnimationKey.allCases {
             let custom = coat == .custom ? Self.loadFrames(for: key, from: spriteDirectories) : nil
-            let images = custom ?? SpriteFactory.frames(for: key, palette: palette)
+            let images = custom ?? SpriteFactory.frames(for: key, palette: palette, style: builtInStyle)
             frames[key] = images
             mirroredFrames[key] = images.map(Self.mirrored)
+            framesPerSecond[key] = custom == nil ? SpriteFactory.framesPerSecond(for: key, style: builtInStyle) : key.framesPerSecond
         }
+        frameIndex = 0
+        elapsed = 0
     }
 
     nonisolated static func hasCustomSprites(in directories: [URL] = defaultSpriteDirectories()) -> Bool {
@@ -88,7 +115,8 @@ final class SpriteAnimator {
 
     func advance(by dt: TimeInterval) {
         let count = frames[current]?.count ?? 1
-        let interval = 1 / current.framesPerSecond
+        let rate = current == .walk ? walkRate : 1
+        let interval = 1 / ((framesPerSecond[current] ?? current.framesPerSecond) * rate)
         elapsed += dt
         while elapsed >= interval {
             elapsed -= interval
@@ -139,8 +167,27 @@ final class SpriteAnimator {
         }
     }
 
+    /// Bitmap frames (pixel art, custom PNGs) are flipped pixel for pixel so they stay crisp;
+    /// vector frames are flipped as they draw.
     private static func mirrored(_ image: NSImage) -> NSImage {
-        NSImage(size: image.size, flipped: false) { rect in
+        if let bitmap = image.representations.first as? NSBitmapImageRep, let source = bitmap.cgImage,
+           let context = CGContext(
+               data: nil,
+               width: source.width,
+               height: source.height,
+               bitsPerComponent: 8,
+               bytesPerRow: 0,
+               space: CGColorSpaceCreateDeviceRGB(),
+               bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+           ) {
+            context.translateBy(x: CGFloat(source.width), y: 0)
+            context.scaleBy(x: -1, y: 1)
+            context.draw(source, in: CGRect(x: 0, y: 0, width: source.width, height: source.height))
+            if let flipped = context.makeImage() {
+                return NSImage(cgImage: flipped, size: image.size)
+            }
+        }
+        return NSImage(size: image.size, flipped: false) { rect in
             let transform = NSAffineTransform()
             transform.translateX(by: rect.width, yBy: 0)
             transform.scaleX(by: -1, yBy: 1)

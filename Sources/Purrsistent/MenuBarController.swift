@@ -49,6 +49,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         let coats = Coat.allCases.filter { $0 != .custom || SpriteAnimator.hasCustomSprites() || settings.coat == .custom }
         menu.addItem(choices("Coat", coats, selected: settings.coat, title: \.title) { [settings] in settings.coat = $0 })
+        let style = choices("Style", ArtStyle.allCases, selected: settings.style, title: \.title) { [settings] in settings.style = $0 }
+        style.isEnabled = settings.coat != .custom
+        menu.addItem(style)
         menu.addItem(choices("Size", PetSize.allCases, selected: settings.size, title: \.title) { [settings] in settings.size = $0 })
         menu.addItem(choices("Speed", PetSpeed.allCases, selected: settings.speed, title: \.title) { [settings] in settings.speed = $0 })
         menu.addItem(toggle("Stay Still", isOn: settings.stayStill) { [settings] in settings.stayStill.toggle() })
