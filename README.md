@@ -29,7 +29,7 @@ Purrsistent is a native macOS desktop pet. A small animated cat strolls along th
 - **Treats and mood**: give it a fish treat and it trots over to eat it. Its mood rises with attention and slowly fades when it's ignored, and a happier cat plays more.
 - **Break reminders**: optionally reminds you to stretch, drink water, or rest your eyes, in a little speech bubble.
 - **Coats**: Orange, Midnight, Silver, and Snowball, or your own artwork.
-- **Styles**: Cartoon, Pixel (chunky 32×32 pixel art), Silhouette (a dark shape with glowing eyes), and Anime (a lankier, hand-drawn-looking cat with cel shading). Any style works with any coat.
+- **Styles**: Cartoon, Pixel (chunky 32×32 pixel art), Silhouette (a dark shape with glowing eyes), and Anime (a fluffy kitten with big glossy eyes, cheek tufts, and cel shading). Any style works with any coat.
 - **Sounds**: real cat recordings for meows, a surprised chirp, and a soft purr, plus a thud on landing. Pick a voice: Classic, Kitten, or Tomcat.
 - **Stays out of the way**: no Dock icon, and clicks on transparent pixels pass through.
 - **Menu bar controls**: everything is in the paw icon in the menu bar, or right-click the cat.
@@ -144,7 +144,7 @@ Sources/Purrsistent/
   SpriteAnimator.swift     Loads, mirrors, and steps through animation frames
   SpriteFactory.swift      Draws the built-in cat, its coats and styles, and the treat
   PixelArt.swift           Turns a vector drawing into pixel art
-  AnimeCatFactory.swift    Rigged anime cat: jointed legs, keyframed poses, cel shading
+  AnimeCatFactory.swift    Rigged anime kitten: jointed legs, keyframed poses, fur tufts, cel shading
   SoundPlayer.swift        Loads and plays sound effects and loops
   SoundFactory.swift       Synthesizes fallback sounds
   IconFactory.swift        Draws the app icon and logo
