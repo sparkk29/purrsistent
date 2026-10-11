@@ -50,7 +50,7 @@ final class AnimeCatRenderer {
     nonisolated static func visibleChange(from a: AnimeCatFactory.RigPose, to b: AnimeCatFactory.RigPose) -> CGFloat {
         guard a.eyes == b.eyes, a.mouth == b.mouth,
               a.hindFolded == b.hindFolded, a.scratching == b.scratching, a.frontTucked == b.frontTucked,
-              a.tailInFront == b.tailInFront, a.upsideDown == b.upsideDown,
+              a.pawToFace == b.pawToFace, a.tailInFront == b.tailInFront, a.upsideDown == b.upsideDown,
               a.headTurnedBack == b.headTurnedBack, a.flipped == b.flipped, a.showShadow == b.showShadow
         else { return .infinity }
 

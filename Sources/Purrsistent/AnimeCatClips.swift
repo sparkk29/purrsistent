@@ -308,29 +308,34 @@ enum AnimeCatClips {
             close.lid = 0.7
             return AnimeClip([Pose(), start, wide, wide, close], durations: [0.3, 0.2, 0.3, 0.3])
         case .groom:
+            // The paw comes up under the chin and the head bows to lick it. The paw stays below
+            // the mouth: at this size a paw over the muzzle reads as a smudge across the face.
             var raise = sitting
-            raise.frontNear = CGPoint(x: 44.5, y: 22)
-            raise.head = CGPoint(x: 43, y: 32)
-            raise.headTilt = -6
-            raise.lid = 0.72
-            raise.look = CGVector(dx: 0.5, dy: -0.7)
+            raise.pawToFace = true
+            raise.frontNear = CGPoint(x: 43, y: 15.5)
+            raise.head = CGPoint(x: 43.5, y: 32)
+            raise.headTilt = -8
+            raise.lid = 0.3
+            raise.look = CGVector(dx: 0.3, dy: -0.9)
             var lick = sitting
-            lick.head = CGPoint(x: 42, y: 30.5)
-            lick.headTilt = -14
-            lick.earSpread = 8
+            lick.pawToFace = true
+            lick.head = CGPoint(x: 42.5, y: 30)
+            lick.headTilt = -18
+            lick.earSpread = 6
             lick.eyes = .closed
             lick.mouth = .tongue
-            lick.frontNear = CGPoint(x: 45.5, y: 26)
+            lick.frontNear = CGPoint(x: 43.5, y: 18)
             var lower = lick
-            lower.frontNear = CGPoint(x: 45, y: 24.5)
-            lower.head.y += 0.7
-            var wipe = lick
-            wipe.mouth = .closed
-            wipe.frontNear = CGPoint(x: 43.5, y: 29.5)
-            wipe.head = CGPoint(x: 42.5, y: 31)
-            wipe.headTilt = -24
-            wipe.earSpread = 18
-            return AnimeClip([sitting, raise, lick, lower, lick, wipe], durations: [0.45, 0.3, 0.22, 0.22, 0.4, 0.35], loopStart: 2)
+            lower.frontNear = CGPoint(x: 43.8, y: 17.2)
+            lower.head.y -= 0.6
+            lower.headTilt = -20
+            var pause = lick
+            pause.mouth = .closed
+            pause.frontNear = CGPoint(x: 44.5, y: 16.5)
+            pause.head = CGPoint(x: 43, y: 31.5)
+            pause.headTilt = -10
+            pause.earSpread = 14
+            return AnimeClip([sitting, raise, lick, lower, lick, lower, lick, pause], durations: [0.45, 0.3, 0.2, 0.2, 0.2, 0.2, 0.35, 0.4], loopStart: 2)
         case .eat:
             var chew = Pose()
             chew.shoulder.y = 19.5

@@ -67,6 +67,9 @@ enum AnimeCatFactory {
         var scratching = false
         /// Front legs tucked under the chest.
         var frontTucked = false
+        /// The near front paw is held up in front of the chin or face, as when grooming, so it's
+        /// drawn over the head even while it's still low.
+        var pawToFace = false
         var tailInFront = false
         /// Lying on its back: belly and paws up.
         var upsideDown = false
@@ -503,7 +506,7 @@ enum AnimeCatFactory {
 
         /// A near paw lifted across the body would merge into its outline, so it gets its own on top.
         var frontRaised: Bool {
-            !pose.frontTucked && pose.frontNear.y > pose.shoulder.y - chestRadius * 0.5
+            !pose.frontTucked && (pose.pawToFace || pose.frontNear.y > pose.shoulder.y - chestRadius * 0.5)
         }
 
         func raisedParts(_ colors: Colors) -> [Part] {
