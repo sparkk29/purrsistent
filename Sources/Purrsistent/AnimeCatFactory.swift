@@ -19,20 +19,28 @@ enum AnimeCatFactory {
         var head = CGPoint(x: 47.5, y: 32.5)
         /// Degrees counter-clockwise; negative looks down.
         var headTilt: CGFloat = 0
-        /// Degrees; positive folds the ears back.
+        /// Degrees; positive folds both ears back.
         var earTilt: CGFloat = 0
+        /// Degrees each ear swings outward: flattened when scared or blissful, negative to perk up.
+        var earSpread: CGFloat = 0
+        /// Degrees the right ear flicks outward on its own.
+        var earTwitch: CGFloat = 0
         var frontNear = CGPoint(x: 41.5, y: ground)
         var frontFar = CGPoint(x: 37.5, y: ground)
-        var backNear = CGPoint(x: 21, y: ground)
-        var backFar = CGPoint(x: 17, y: ground)
-        /// 1 bends the front wrists forward, -1 tucks the elbows back.
-        var frontBend: CGFloat = 1
+        var backNear = CGPoint(x: 22.5, y: ground)
+        var backFar = CGPoint(x: 18.5, y: ground)
+        /// -1 points the elbows back like a real cat's; 1 bends them forward.
+        var frontBend: CGFloat = -1
         var tail1 = CGVector(dx: -7, dy: 1)
         var tail2 = CGVector(dx: -12, dy: 10)
         var tailTip = CGVector(dx: -9, dy: 19)
         /// Raises the whole cat off the ground (the shadow stays put).
         var lift: CGFloat = 0
         var eyes: Eyes = .open
+        /// How far open eyes are lidded, 0 to 1: the in-between frames of a blink.
+        var lid: CGFloat = 0
+        /// Where the pupils look, about -1...1 each way.
+        var look = CGVector.zero
         var mouth: Mouth = .closed
         /// Hind legs folded under the haunch, as when sitting or lying down.
         var hindFolded = false
@@ -58,8 +66,9 @@ enum AnimeCatFactory {
     private static let rumpRadius: CGFloat = 8
     private static let chestRadius: CGFloat = 7.4
     private static let headScale: CGFloat = 1.5
-    private static let frontLengths: (CGFloat, CGFloat) = (6.4, 6)
-    private static let hindLengths: (CGFloat, CGFloat) = (7.6, 7.2)
+    private static let frontLengths: (CGFloat, CGFloat) = (6.2, 6.6)
+    /// Thigh, shin, and the long foot bone that ends at the hock.
+    private static let hindLengths: (CGFloat, CGFloat, CGFloat) = (5.4, 5.4, 4.4)
 
     static func frames(for key: AnimationKey, palette: SpriteFactory.Palette) -> [NSImage] {
         poses(for: key).map { pose in
@@ -73,7 +82,7 @@ enum AnimeCatFactory {
     static func framesPerSecond(for key: AnimationKey) -> Double {
         switch key {
         case .idle: 8
-        case .walk: 10
+        case .walk: Double(walkFrames) * walkSpeed / (walkStride / walkDuty)
         case .sit: 4
         case .sleep: 2
         case .drag: 6
@@ -86,7 +95,7 @@ enum AnimeCatFactory {
         case .stretch: 10
         case .scratch: 14
         case .knead: 6
-        case .rollOver: 5
+        case .rollOver: 6
         case .loaf: 4
         case .pounce: 10
         case .leap: 8
@@ -104,16 +113,29 @@ enum AnimeCatFactory {
             breathe.head.y += 0.4
             breathe.tail2 = CGVector(dx: -13, dy: 9)
             breathe.tailTip = CGVector(dx: -11, dy: 18)
+            breathe.look = CGVector(dx: 0.8, dy: 0.2)
             var sway = RigPose()
             sway.tailTip = CGVector(dx: -7, dy: 20)
-            return blink(tween([RigPose(), breathe, sway], steps: [4, 4, 4], loop: true), at: [9])
+            sway.look = CGVector(dx: -0.7, dy: 0)
+            sway.headTilt = 3
+            sway.earSpread = 4
+            var frames = blink(tween([RigPose(), breathe, sway], steps: [4, 4, 4], loop: true), at: [10])
+            frames[4].earTwitch = 30
+            frames[5].earTwitch = 8
+            frames[6].earTwitch = 22
+            return frames
         case .walk:
             return walkCycle()
         case .sit:
             var twitch = sitting
-            twitch.headTilt = 3
+            twitch.headTilt = 5
             twitch.tailTip.dy += 1.2
-            return blink(tween([sitting, twitch], steps: [4, 4], loop: true), at: [6])
+            twitch.look = CGVector(dx: 0.6, dy: 0.6)
+            twitch.earSpread = -6
+            var frames = blink(tween([sitting, twitch], steps: [4, 4], loop: true), at: [6])
+            frames[2].earTwitch = 28
+            frames[3].earTwitch = 6
+            return frames
         case .sleep:
             var inhale = curled
             inhale.arch = 2.8
@@ -131,6 +153,7 @@ enum AnimeCatFactory {
             sway.backNear.x += 1.5
             sway.backFar.x += 1
             sway.tailTip.dx += 2
+            sway.earSpread += 6
             return tween([dangling, sway], steps: [2, 2], loop: true)
         case .fall:
             var flail = falling
@@ -139,6 +162,7 @@ enum AnimeCatFactory {
             flail.backNear.y -= 1
             flail.backFar.y += 1.5
             flail.tailTip.dx -= 2
+            flail.earSpread += 10
             return tween([falling, flail], steps: [2, 2], loop: true)
         case .happy:
             var stand = RigPose()
@@ -150,7 +174,9 @@ enum AnimeCatFactory {
             crouch.shoulder.y = 18.5
             crouch.head.y = 28.5
             crouch.arch = 0
+            crouch.earSpread = 12
             var air = stand
+            air.earSpread = -10
             air.lift = 7
             air.hip.y = 22
             air.shoulder.y = 22.5
@@ -165,10 +191,12 @@ enum AnimeCatFactory {
             var nuzzle = RigPose()
             nuzzle.head = CGPoint(x: 47.5, y: 32.5)
             nuzzle.headTilt = 14
-            nuzzle.earTilt = 18
+            nuzzle.earSpread = 26
             nuzzle.eyes = .closed
             nuzzle.blush = true
             var curl = nuzzle
+            curl.earSpread = 32
+            curl.headTilt = 18
             curl.tail2 = CGVector(dx: -13, dy: 8)
             curl.tailTip = CGVector(dx: -11, dy: 17)
             nuzzle.tailTip = CGVector(dx: -4, dy: 20)
@@ -182,7 +210,7 @@ enum AnimeCatFactory {
             var wide = RigPose()
             wide.head = CGPoint(x: 48, y: 33.5)
             wide.headTilt = 22
-            wide.earTilt = 14
+            wide.earSpread = 24
             wide.eyes = .closed
             wide.mouth = .wide
             wide.frontNear.x = 43
@@ -191,6 +219,7 @@ enum AnimeCatFactory {
             var lick = sitting
             lick.head = CGPoint(x: 42, y: 30.5)
             lick.headTilt = -14
+            lick.earSpread = 8
             lick.eyes = .closed
             lick.mouth = .tongue
             lick.frontBend = -1
@@ -206,9 +235,11 @@ enum AnimeCatFactory {
             chew.headTilt = -22
             chew.eyes = .happy
             chew.mouth = .open
+            chew.earSpread = 6
             var bite = chew
             bite.mouth = .closed
             bite.head.y += 0.6
+            bite.earSpread = 12
             bite.tailTip = CGVector(dx: -11, dy: 18)
             return tween([chew, bite], steps: [4, 4], loop: true)
         case .stretch:
@@ -218,7 +249,7 @@ enum AnimeCatFactory {
             bow.arch = -1.5
             bow.head = CGPoint(x: 48.5, y: 20.5)
             bow.headTilt = -6
-            bow.earTilt = 10
+            bow.earSpread = 20
             bow.eyes = .closed
             bow.mouth = .wide
             bow.frontNear = CGPoint(x: 55, y: ground)
@@ -250,15 +281,16 @@ enum AnimeCatFactory {
             scratch.shoulder = CGPoint(x: 35, y: 21.5)
             scratch.head = CGPoint(x: 40.5, y: 29)
             scratch.headTilt = -20
-            scratch.earTilt = 20
+            scratch.earSpread = 8
             scratch.eyes = .closed
             scratch.scratching = true
             scratch.frontNear = CGPoint(x: 38.5, y: ground)
             scratch.frontFar = CGPoint(x: 35.5, y: ground)
             let paws = [CGPoint(x: 31, y: 22.5), CGPoint(x: 32, y: 24.5), CGPoint(x: 31.3, y: 23), CGPoint(x: 32.3, y: 24.8)]
-            return paws.map { paw in
+            return paws.enumerated().map { index, paw in
                 var pose = scratch
                 pose.backNear = paw
+                pose.earTwitch = index % 2 == 0 ? 26 : 36
                 return pose
             }
         case .knead:
@@ -267,6 +299,7 @@ enum AnimeCatFactory {
             press.shoulder = CGPoint(x: 39, y: 17.5)
             press.head = CGPoint(x: 47.5, y: 27.5)
             press.eyes = .half
+            press.earSpread = 14
             press.blush = true
             press.tail1 = CGVector(dx: -6, dy: 3)
             press.tail2 = CGVector(dx: -9, dy: 12)
@@ -282,29 +315,45 @@ enum AnimeCatFactory {
             farUp.frontFar = CGPoint(x: 40.5, y: 9.5)
             return tween([nearUp, down, farUp, down], steps: [2, 2, 2, 2], loop: true)
         case .rollOver:
+            // Belly up, head tipped back on the floor, curled kitten paws batting at the air.
             var belly = RigPose()
             belly.upsideDown = true
-            belly.hip = CGPoint(x: 22, y: 13)
-            belly.shoulder = CGPoint(x: 40, y: 13.5)
-            belly.arch = 0.5
-            belly.head = CGPoint(x: 48, y: 18)
-            belly.earTilt = 30
+            belly.hip = CGPoint(x: 16, y: 12.5)
+            belly.shoulder = CGPoint(x: 32, y: 13)
+            belly.arch = 1
+            belly.sag = 0
+            belly.head = CGPoint(x: 43.5, y: 16.5)
+            belly.headTilt = -18
+            belly.earSpread = 16
+            belly.look = CGVector(dx: -0.6, dy: 0.6)
             belly.blush = true
-            belly.frontNear = CGPoint(x: 45, y: 27)
-            belly.frontFar = CGPoint(x: 42, y: 29.5)
-            belly.backNear = CGPoint(x: 21.5, y: 27.5)
-            belly.backFar = CGPoint(x: 25.5, y: 29)
-            belly.tail1 = CGVector(dx: -5, dy: -2)
-            belly.tail2 = CGVector(dx: -10, dy: -3)
-            belly.tailTip = CGVector(dx: -13, dy: 0)
-            var wiggle = belly
-            wiggle.frontNear = CGPoint(x: 47, y: 25.5)
-            wiggle.frontFar = CGPoint(x: 41, y: 30.5)
-            wiggle.backNear = CGPoint(x: 19.5, y: 27)
-            wiggle.backFar = CGPoint(x: 26.5, y: 30)
-            wiggle.tailTip = CGVector(dx: -13, dy: 2)
-            wiggle.eyes = .happy
-            return tween([belly, wiggle], steps: [4, 4], loop: true)
+            belly.mouth = .open
+            belly.frontNear = CGPoint(x: 35, y: 26)
+            belly.frontFar = CGPoint(x: 29, y: 28)
+            belly.backNear = CGPoint(x: 19, y: 25.5)
+            belly.backFar = CGPoint(x: 14.5, y: 27)
+            belly.tail1 = CGVector(dx: -4, dy: 0)
+            belly.tail2 = CGVector(dx: -8, dy: 3)
+            belly.tailTip = CGVector(dx: -7, dy: 8)
+            var batNear = belly
+            batNear.frontNear = CGPoint(x: 37.5, y: 28.5)
+            batNear.backFar = CGPoint(x: 12.5, y: 28.5)
+            batNear.headTilt = -12
+            batNear.tailTip = CGVector(dx: -9, dy: 6)
+            batNear.hip.y += 0.5
+            var happy = belly
+            happy.eyes = .happy
+            happy.headTilt = -22
+            happy.earSpread = 22
+            happy.tailTip = CGVector(dx: -5, dy: 9)
+            var batFar = belly
+            batFar.frontFar = CGPoint(x: 31, y: 30.5)
+            batFar.backNear = CGPoint(x: 21.5, y: 28)
+            batFar.headTilt = -14
+            batFar.look = CGVector(dx: -0.3, dy: 0.8)
+            batFar.tailTip = CGVector(dx: -9, dy: 7)
+            batFar.shoulder.y += 0.5
+            return tween([belly, batNear, happy, batFar], steps: [3, 3, 3, 3], loop: true)
         case .loaf:
             var breathe = loafing
             breathe.arch = 2
@@ -316,8 +365,9 @@ enum AnimeCatFactory {
             crouch.arch = 0.5
             crouch.head = CGPoint(x: 48, y: 19.5)
             crouch.headTilt = -4
-            crouch.earTilt = -6
+            crouch.earSpread = -12
             crouch.eyes = .wide
+            crouch.look = CGVector(dx: 0.9, dy: -0.2)
             crouch.frontBend = -1
             crouch.frontNear = CGPoint(x: 47, y: ground)
             crouch.frontFar = CGPoint(x: 44.5, y: ground)
@@ -330,6 +380,7 @@ enum AnimeCatFactory {
             wiggle.hip.x += 1.2
             wiggle.hip.y += 0.5
             wiggle.tailTip = CGVector(dx: -10, dy: 9)
+            wiggle.earTwitch = 10
             return tween([crouch, wiggle], steps: [2, 2], loop: true)
         case .leap:
             var flight = RigPose()
@@ -338,6 +389,8 @@ enum AnimeCatFactory {
             flight.head = CGPoint(x: 44.5, y: 36)
             flight.headTilt = 8
             flight.eyes = .wide
+            flight.look = CGVector(dx: 0.9, dy: -0.3)
+            flight.earSpread = 22
             flight.mouth = .open
             flight.showShadow = false
             flight.frontNear = CGPoint(x: 55, y: 21.5)
@@ -357,6 +410,8 @@ enum AnimeCatFactory {
             chase.headTurnedBack = true
             chase.head = CGPoint(x: 41, y: 30.5)
             chase.eyes = .wide
+            chase.look = CGVector(dx: 0.8, dy: -0.4)
+            chase.earSpread = -8
             chase.mouth = .open
             chase.tail1 = CGVector(dx: -3, dy: 7)
             chase.tail2 = CGVector(dx: 4, dy: 15)
@@ -401,7 +456,7 @@ enum AnimeCatFactory {
         pose.sag = 0
         pose.head = CGPoint(x: 43.5, y: 13.5)
         pose.headTilt = -12
-        pose.earTilt = 10
+        pose.earSpread = 22
         pose.eyes = .closed
         pose.hindFolded = true
         pose.frontTucked = true
@@ -421,7 +476,7 @@ enum AnimeCatFactory {
         pose.arch = 1.5
         pose.head = CGPoint(x: 45, y: 23)
         pose.headTilt = 0
-        pose.earTilt = 0
+        pose.earSpread = 8
         pose.eyes = .half
         pose.tail1 = CGVector(dx: -3, dy: -5.5)
         pose.tail2 = CGVector(dx: 10, dy: -7.5)
@@ -436,7 +491,7 @@ enum AnimeCatFactory {
         pose.arch = 0
         pose.head = CGPoint(x: 35, y: 44)
         pose.headTilt = 4
-        pose.earTilt = 12
+        pose.earSpread = 30
         pose.eyes = .wide
         pose.mouth = .open
         pose.showShadow = false
@@ -456,7 +511,7 @@ enum AnimeCatFactory {
         pose.shoulder = CGPoint(x: 40, y: 27)
         pose.head = CGPoint(x: 48.5, y: 35)
         pose.headTilt = 6
-        pose.earTilt = 14
+        pose.earSpread = 24
         pose.eyes = .wide
         pose.mouth = .open
         pose.showShadow = false
@@ -470,31 +525,43 @@ enum AnimeCatFactory {
         return pose
     }
 
-    /// One stride carries the body 24 units, matching the walking speed at 10 fps, so planted
-    /// paws stay put on the ground. Paws step in a lateral sequence: back, front, other back, other front.
+    /// Canvas units per second the pet moves at Normal speed (45 points at the 96-point size).
+    private static let walkSpeed: Double = 30
+    private static let walkStride: Double = 9
+    /// Share of the cycle each paw spends planted on the ground.
+    private static let walkDuty: Double = 0.6
+    private static let walkFrames = 10
+
+    /// Short, quick kitten steps. A planted paw slides back exactly as fast as the pet walks
+    /// forward (see the walk's frame rate), so it stays put on the screen. Paws step in a lateral
+    /// sequence: back, front, other back, other front.
     private static func walkCycle() -> [RigPose] {
         let base = RigPose()
-        let stride: CGFloat = 12
-        func paw(_ rest: CGPoint, phase: CGFloat) -> CGPoint {
-            let q = phase.truncatingRemainder(dividingBy: 1)
-            if q < 0.5 {
-                return CGPoint(x: rest.x + stride / 2 - stride * 2 * q, y: ground)
+        let stride = CGFloat(walkStride), duty = CGFloat(walkDuty)
+        func paw(_ rest: CGPoint, phase: CGFloat, lift: CGFloat) -> CGPoint {
+            let q = phase - floor(phase)
+            if q < duty {
+                return CGPoint(x: rest.x + stride / 2 - stride * q / duty, y: ground)
             }
-            let swing = (q - 0.5) / 0.5
-            return CGPoint(x: rest.x - stride / 2 + stride * swing, y: ground + 3.2 * sin(.pi * swing))
+            let s = (q - duty) / (1 - duty)
+            let eased = s * s * (3 - 2 * s)
+            return CGPoint(x: rest.x - stride / 2 + stride * eased, y: ground + lift * sin(.pi * pow(s, 0.8)))
         }
-        return (0..<8).map { index in
-            let phase = CGFloat(index) / 8
+        return (0..<walkFrames).map { index in
+            let phase = CGFloat(index) / CGFloat(walkFrames)
             var pose = base
-            let bob = 0.4 * sin(4 * .pi * phase)
-            pose.hip.y += bob
-            pose.shoulder.y += bob
-            pose.head.y += 0.5 * sin(4 * .pi * phase + 0.8)
-            pose.backNear = paw(base.backNear, phase: phase)
-            pose.frontNear = paw(base.frontNear, phase: phase + 0.25)
-            pose.backFar = paw(base.backFar, phase: phase + 0.5)
-            pose.frontFar = paw(base.frontFar, phase: phase + 0.75)
-            pose.tailTip.dx += 1.5 * sin(2 * .pi * phase)
+            pose.look = CGVector(dx: 0.6, dy: 0)
+            pose.earSpread = 4 * sin(4 * .pi * phase + 1)
+            pose.hip.y += 0.35 * cos(4 * .pi * phase)
+            pose.shoulder.y += 0.35 * cos(4 * .pi * phase + 1.6)
+            pose.head.y += 0.4 * cos(4 * .pi * phase + 2.2)
+            pose.headTilt = 1.5 * sin(2 * .pi * phase)
+            pose.backNear = paw(base.backNear, phase: phase, lift: 2.6)
+            pose.frontNear = paw(base.frontNear, phase: phase + 0.25, lift: 3)
+            pose.backFar = paw(base.backFar, phase: phase + 0.5, lift: 2.6)
+            pose.frontFar = paw(base.frontFar, phase: phase + 0.75, lift: 3)
+            pose.tail2.dx += 0.8 * sin(2 * .pi * phase + 0.6)
+            pose.tailTip.dx += 1.8 * sin(2 * .pi * phase)
             return pose
         }
     }
@@ -515,9 +582,18 @@ enum AnimeCatFactory {
         return frames
     }
 
+    /// Closes the eyes on the given frames, half-lidding open eyes on the frames either side so
+    /// the blink eases shut and open again.
     private static func blink(_ frames: [RigPose], at indices: [Int], eyes: Eyes = .closed) -> [RigPose] {
         var frames = frames
-        for index in indices where index < frames.count { frames[index].eyes = eyes }
+        for index in indices where frames.indices.contains(index) {
+            let wasOpen = frames[index].eyes == .open || frames[index].eyes == .wide
+            frames[index].eyes = eyes
+            guard wasOpen, eyes == .closed else { continue }
+            for neighbor in [index - 1, index + 1] where frames.indices.contains(neighbor) && !indices.contains(neighbor) {
+                frames[neighbor].lid = max(frames[neighbor].lid, 0.4)
+            }
+        }
         return frames
     }
 
@@ -534,6 +610,8 @@ enum AnimeCatFactory {
         pose.head = blend(a.head, b.head)
         pose.headTilt = blend(a.headTilt, b.headTilt)
         pose.earTilt = blend(a.earTilt, b.earTilt)
+        pose.earSpread = blend(a.earSpread, b.earSpread)
+        pose.earTwitch = blend(a.earTwitch, b.earTwitch)
         pose.frontNear = blend(a.frontNear, b.frontNear)
         pose.frontFar = blend(a.frontFar, b.frontFar)
         pose.backNear = blend(a.backNear, b.backNear)
@@ -542,6 +620,8 @@ enum AnimeCatFactory {
         pose.tail2 = blend(a.tail2, b.tail2)
         pose.tailTip = blend(a.tailTip, b.tailTip)
         pose.lift = blend(a.lift, b.lift)
+        pose.lid = blend(a.lid, b.lid)
+        pose.look = blend(a.look, b.look)
         return pose
     }
 
@@ -695,6 +775,16 @@ enum AnimeCatFactory {
             return capsule(start, headPoint(CGPoint(x: -1, y: -3), of: pose), width: 9.5)
         }
 
+        /// A soft bib of fur on the front of the chest, its tufts pointing down toward the paws.
+        var chestFluff: CGPath {
+            let center = pose.shoulder + axis * (chestRadius * 0.45) + normal * 0.5
+            let local = furryEllipse(CGRect(x: -4.2, y: -5.6, width: 8.4, height: 11.2), tufts: [
+                Tuft(from: 300, to: 20, count: 3, depth: 1, sweep: -0.4),
+            ])
+            var transform = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: atan2(axis.dy, axis.dx))
+            return local.copy(using: &transform) ?? local
+        }
+
         var haunch: CGPath {
             let center = pose.hip + axis * 1.2 - normal * 0.6
             var transform = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: atan2(axis.dy, axis.dx))
@@ -704,24 +794,51 @@ enum AnimeCatFactory {
         var frontRoot: CGPoint { pose.shoulder - normal * 1.8 + axis * 0.5 }
         var hindRoot: CGPoint { pose.hip - normal * 1.2 + axis * 1 }
 
+        /// Shoulder to elbow to paw, the elbow pointing back.
         func frontLeg(to paw: CGPoint) -> [CGPath] {
             let bend = pose.frontBend * (pose.upsideDown ? -1 : 1)
-            return leg(from: frontRoot, to: paw, lengths: frontLengths, widths: (5, 4), bend: bend)
+            let elbow = solveJoint(root: frontRoot, target: paw, upper: frontLengths.0, lower: frontLengths.1, bend: bend)
+            return limb([frontRoot, elbow, paw], widths: [5.2, 4, 3.4]) + [pawPath(paw, tilt: pawTilt(paw))]
         }
 
+        /// Hip to knee (pointing forward) to hock (pointing back) to paw: the springy zigzag of a
+        /// cat's hind leg. The foot bone leans back from the paw toward the hip.
         func hindLeg(to paw: CGPoint) -> [CGPath] {
-            leg(from: hindRoot, to: paw, lengths: hindLengths, widths: (5.8, 4), bend: pose.upsideDown ? 1 : -1)
+            let flip: CGFloat = pose.upsideDown ? -1 : 1
+            let toHip = (hindRoot - paw).normalized
+            let lean = 0.5 * flip
+            let foot = CGVector(dx: toHip.dx * cos(lean) - toHip.dy * sin(lean), dy: toHip.dx * sin(lean) + toHip.dy * cos(lean))
+            let hock = paw + foot * hindLengths.2
+            let knee = solveJoint(root: hindRoot, target: hock, upper: hindLengths.0, lower: hindLengths.1, bend: flip)
+            return limb([hindRoot, knee, hock, paw], widths: [6, 4.6, 3.5, 3.3]) + [pawPath(paw, tilt: pawTilt(paw))]
+        }
+
+        /// Lifted paws point their toes down.
+        private func pawTilt(_ paw: CGPoint) -> CGFloat {
+            guard !pose.upsideDown else { return 0 }
+            return -0.45 * min(1, max(0, paw.y - ground - 0.3) / 2.5)
+        }
+
+        func legPart(_ paths: [CGPath], paws: [CGPoint], color: CGColor, colors: Colors) -> Part {
+            Part(paths: paths, color: color, shadeShift: 1.1) { context in
+                drawToes(paws, colors: colors, upsideDown: pose.upsideDown, in: context)
+            }
         }
 
         func farParts(_ colors: Colors) -> [Part] {
             var paths: [CGPath] = []
+            var paws: [CGPoint] = []
             if pose.hindFolded {
                 paths.append(pawPath(pose.backFar))
             } else {
                 paths += hindLeg(to: pose.backFar)
             }
-            if !pose.frontTucked { paths += frontLeg(to: pose.frontFar) }
-            return [Part(paths: paths, color: colors.far, shadeShift: 1.1)]
+            paws.append(pose.backFar)
+            if !pose.frontTucked {
+                paths += frontLeg(to: pose.frontFar)
+                paws.append(pose.frontFar)
+            }
+            return [legPart(paths, paws: paws, color: colors.far, colors: colors)]
         }
 
         func nearParts(_ colors: Colors) -> [Part] {
@@ -732,36 +849,37 @@ enum AnimeCatFactory {
                     if let stripes { backStripes(stripes, in: context) }
                 },
                 Part(paths: [neck], color: colors.fur, shadeShift: 0),
+                Part(paths: [chestFluff], color: colors.belly, shadeShift: 0.8),
                 Part(paths: [haunch], color: colors.fur, shadeShift: 1.8, highlight: true) { context in
                     if let stripes { haunchStripes(stripes, in: context) }
                 },
             ]
             if pose.hindFolded && !pose.scratching {
-                parts.append(Part(paths: [pawPath(pose.backNear)], color: colors.fur, shadeShift: 1.1))
+                parts.append(legPart([pawPath(pose.backNear)], paws: [pose.backNear], color: colors.fur, colors: colors))
             } else if !pose.scratching {
-                parts.append(Part(paths: hindLeg(to: pose.backNear), color: colors.fur, shadeShift: 1.1))
+                parts.append(legPart(hindLeg(to: pose.backNear), paws: [pose.backNear], color: colors.fur, colors: colors))
             }
             if pose.frontTucked {
                 let paw = CGPoint(x: pose.shoulder.x + chestRadius * 0.7, y: ground)
-                parts.append(Part(paths: [pawPath(paw)], color: colors.fur, shadeShift: 0.8))
+                parts.append(legPart([pawPath(paw)], paws: [paw], color: colors.fur, colors: colors))
             } else if !frontRaised {
-                parts.append(Part(paths: frontLeg(to: pose.frontNear), color: colors.fur, shadeShift: 1.1))
+                parts.append(legPart(frontLeg(to: pose.frontNear), paws: [pose.frontNear], color: colors.fur, colors: colors))
             }
             return parts
         }
 
         /// A near paw lifted across the body would merge into its outline, so it gets its own on top.
         var frontRaised: Bool {
-            !pose.frontTucked && !pose.upsideDown && pose.frontNear.y > pose.shoulder.y - chestRadius * 0.5
+            !pose.frontTucked && pose.frontNear.y > pose.shoulder.y - chestRadius * 0.5
         }
 
         func raisedParts(_ colors: Colors) -> [Part] {
             var parts: [Part] = []
             if pose.scratching {
-                parts.append(Part(paths: hindLeg(to: pose.backNear), color: colors.fur, shadeShift: 1.1))
+                parts.append(legPart(hindLeg(to: pose.backNear), paws: [pose.backNear], color: colors.fur, colors: colors))
             }
             if frontRaised {
-                parts.append(Part(paths: frontLeg(to: pose.frontNear), color: colors.fur, shadeShift: 1.1))
+                parts.append(legPart(frontLeg(to: pose.frontNear), paws: [pose.frontNear], color: colors.fur, colors: colors))
             }
             return parts
         }
@@ -806,9 +924,60 @@ enum AnimeCatFactory {
         }
     }
 
-    private static func leg(from root: CGPoint, to paw: CGPoint, lengths: (CGFloat, CGFloat), widths: (CGFloat, CGFloat), bend: CGFloat) -> [CGPath] {
-        let joint = solveJoint(root: root, target: paw, upper: lengths.0, lower: lengths.1, bend: bend)
-        return [capsule(root, joint, width: widths.0), capsule(joint, paw, width: widths.1), pawPath(paw)]
+    /// A smooth, tapering limb through its joints (a Catmull-Rom curve), with rounded ends.
+    private static func limb(_ joints: [CGPoint], widths: [CGFloat]) -> [CGPath] {
+        var samples: [(point: CGPoint, width: CGFloat)] = []
+        let steps = 8
+        for i in 0..<(joints.count - 1) {
+            let p0 = joints[max(i - 1, 0)], p1 = joints[i], p2 = joints[i + 1], p3 = joints[min(i + 2, joints.count - 1)]
+            for step in 0..<steps {
+                let t = CGFloat(step) / CGFloat(steps)
+                let t2 = t * t, t3 = t2 * t
+                func axis(_ a: CGFloat, _ b: CGFloat, _ c: CGFloat, _ d: CGFloat) -> CGFloat {
+                    0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (3 * b - a - 3 * c + d) * t3)
+                }
+                let point = CGPoint(x: axis(p0.x, p1.x, p2.x, p3.x), y: axis(p0.y, p1.y, p2.y, p3.y))
+                samples.append((point, widths[i] + (widths[i + 1] - widths[i]) * t))
+            }
+        }
+        samples.append((joints[joints.count - 1], widths[widths.count - 1]))
+
+        var left: [CGPoint] = [], right: [CGPoint] = []
+        for (index, sample) in samples.enumerated() {
+            let before = samples[max(index - 1, 0)].point, after = samples[min(index + 1, samples.count - 1)].point
+            let normal = (after - before).normalized.perpendicular
+            left.append(sample.point + normal * (sample.width / 2))
+            right.append(sample.point - normal * (sample.width / 2))
+        }
+        let body = CGMutablePath()
+        body.addLines(between: left + right.reversed())
+        body.closeSubpath()
+        let caps = [samples[0], samples[samples.count - 1]].map { sample in
+            CGPath(ellipseIn: CGRect(x: sample.point.x - sample.width / 2, y: sample.point.y - sample.width / 2, width: sample.width, height: sample.width), transform: nil)
+        }
+        return [body] + caps
+    }
+
+    /// Toe lines on paws standing on the ground, or pink beans on paws turned up.
+    private static func drawToes(_ paws: [CGPoint], colors: Colors, upsideDown: Bool, in context: CGContext) {
+        for paw in paws {
+            let c = CGPoint(x: paw.x + 0.3, y: paw.y)
+            if upsideDown {
+                context.setFillColor(colors.pink)
+                context.fillEllipse(in: CGRect(x: c.x - 1.1, y: c.y - 0.2, width: 2.2, height: 1.5))
+                for dx in [-1.4, 0, 1.4] as [CGFloat] {
+                    context.fillEllipse(in: CGRect(x: c.x + dx - 0.45, y: c.y - 1.3, width: 0.9, height: 0.8))
+                }
+            } else if paw.y < ground + 0.4 {
+                context.setStrokeColor(NSColor(cgColor: colors.line)?.withAlphaComponent(0.6).cgColor ?? colors.line)
+                context.setLineWidth(0.35)
+                for dx in [0.7, 1.8] as [CGFloat] {
+                    context.move(to: CGPoint(x: c.x + dx, y: c.y - 1.6))
+                    context.addLine(to: CGPoint(x: c.x + dx - 0.1, y: c.y - 0.4))
+                }
+                context.strokePath()
+            }
+        }
     }
 
     /// Two-bone inverse kinematics: where the middle joint sits so the leg reaches `target`.
@@ -832,8 +1001,9 @@ enum AnimeCatFactory {
         return path.copy(strokingWithWidth: width, lineCap: .round, lineJoin: .round, miterLimit: 1)
     }
 
-    private static func pawPath(_ paw: CGPoint) -> CGPath {
-        CGPath(ellipseIn: CGRect(x: paw.x - 2.4, y: paw.y - 1.6, width: 5.4, height: 3.3), transform: nil)
+    private static func pawPath(_ paw: CGPoint, tilt: CGFloat = 0) -> CGPath {
+        var transform = CGAffineTransform(translationX: paw.x, y: paw.y).rotated(by: tilt)
+        return CGPath(ellipseIn: CGRect(x: -2.4, y: -1.6, width: 5.4, height: 3.3), transform: &transform)
     }
 
     // MARK: - Tail
@@ -904,7 +1074,6 @@ enum AnimeCatFactory {
     private static func headPoint(_ local: CGPoint, of pose: RigPose) -> CGPoint {
         var point = CGPoint(x: local.x * headScale, y: local.y * headScale)
         if pose.headTurnedBack { point.x = -point.x }
-        if pose.upsideDown { point.y = -point.y }
         let angle = pose.headTilt * .pi / 180
         return CGPoint(
             x: pose.head.x + point.x * cos(angle) - point.y * sin(angle),
@@ -918,49 +1087,38 @@ enum AnimeCatFactory {
         context.translateBy(x: pose.head.x, y: pose.head.y)
         context.rotate(by: pose.headTilt * .pi / 180)
         if pose.headTurnedBack { context.scaleBy(x: -1, y: 1) }
-        if pose.upsideDown { context.scaleBy(x: 1, y: -1) }
         context.scaleBy(x: headScale, y: headScale)
         context.setLineWidth(line / headScale)
 
-        let farEar = ear([CGPoint(x: -7.2, y: 2.2), CGPoint(x: -6.8, y: 11.4), CGPoint(x: -1.9, y: 6.4)], tilt: pose.earTilt)
-        let nearEar = ear([CGPoint(x: 0.4, y: 6.8), CGPoint(x: 5.6, y: 11.6), CGPoint(x: 7.4, y: 2)], tilt: pose.earTilt)
-        let skull = furryEllipse(CGRect(x: -7.8, y: -6.8, width: 15.6, height: 13.4), tufts: [
+        let ears = [ear(side: -1, pose: pose), ear(side: 1, pose: pose)]
+        let skull = furryEllipse(CGRect(x: -8.3, y: -7.3, width: 16.6, height: 13.9), tufts: [
             Tuft(from: 188, to: 252, count: 3, depth: 1.5, sweep: 0.5),
-            Tuft(from: 288, to: 338, count: 2, depth: 1.3, sweep: -0.5),
+            Tuft(from: 318, to: 350, count: 2, depth: 0.9, sweep: -0.5),
             Tuft(from: 92, to: 112, count: 2, depth: 1.2, sweep: 0.5),
         ])
         let stripes = colors.stripes
 
-        var parts: [Part] = []
-        if !pose.frontTucked && !pose.upsideDown {
-            let ruff = furryEllipse(CGRect(x: -5.2, y: -11.6, width: 10.8, height: 8.6), tufts: [
-                Tuft(from: 195, to: 345, count: 6, depth: 1.5, sweep: 0.3),
-            ])
-            parts.append(Part(paths: [ruff], color: colors.belly, shadeShift: 0.8))
-        }
-        parts += [
-            Part(paths: [farEar.outer], color: colors.far, shadeShift: 0) { context in
-                drawInnerEar(farEar, colors: colors, in: context)
-            },
+        let parts = ears.map { ear in
+            Part(paths: [ear.outer], color: colors.fur, shadeShift: 0) { context in
+                drawInnerEar(ear, colors: colors, in: context)
+            }
+        } + [
             Part(paths: [skull], color: colors.fur, shadeShift: 0.6, highlight: true) { context in
                 context.setFillColor(colors.belly)
-                context.fillEllipse(in: CGRect(x: -1.4, y: -7.4, width: 7, height: 5.2))
+                context.fillEllipse(in: CGRect(x: faceCenter - 2.3, y: -6.6, width: 4.6, height: 3.4))
                 guard let stripes else { return }
                 context.setStrokeColor(stripes)
-                context.setLineWidth(0.9)
-                for (top, bottom) in [((-2.4, 6.9), (-1.7, 4.2)), ((-0.1, 7.2), (0.2, 4.6)), ((2.2, 6.9), (2, 4.3))] {
+                context.setLineWidth(0.7)
+                for (top, bottom) in [((-1.8, 6.6), (-1.4, 4.9)), ((0.1, 6.9), (0.2, 5.2)), ((2, 6.6), (1.8, 4.9))] {
                     context.move(to: CGPoint(x: top.0, y: top.1))
                     context.addLine(to: CGPoint(x: bottom.0, y: bottom.1))
                     context.strokePath()
                 }
-                for y in [-0.6, -2.2] as [CGFloat] {
-                    context.move(to: CGPoint(x: -8, y: y))
-                    context.addLine(to: CGPoint(x: -5.6, y: y - 0.4))
+                for y in [-1.4, -2.8] as [CGFloat] {
+                    context.move(to: CGPoint(x: -8.4, y: y))
+                    context.addLine(to: CGPoint(x: -6.6, y: y - 0.3))
                     context.strokePath()
                 }
-            },
-            Part(paths: [nearEar.outer], color: colors.fur, shadeShift: 0) { context in
-                drawInnerEar(nearEar, colors: colors, in: context)
             },
         ]
         drawGroup(parts, colors: colors, in: context, lineWidth: line / headScale)
@@ -969,27 +1127,43 @@ enum AnimeCatFactory {
     }
 
     private struct Ear {
-        let outer, inner: CGPath
-        let base: CGPoint
-        let tip: CGPoint
+        let outer, inner, wisps: CGPath
     }
 
-    private static func ear(_ points: [CGPoint], tilt: CGFloat) -> Ear {
-        let pivot = CGPoint(x: (points[0].x + points[2].x) / 2, y: (points[0].y + points[2].y) / 2)
-        let angle = tilt * .pi / 180
-        let turned = points.map { point -> CGPoint in
-            let d = point - pivot
-            return CGPoint(x: pivot.x + d.dx * cos(angle) - d.dy * sin(angle), y: pivot.y + d.dx * sin(angle) + d.dy * cos(angle))
+    /// A big, round-tipped kitten ear, mirrored about the face (`side` -1 left, 1 right).
+    /// Spread swings it outward (flattened, "airplane" ears) or, negative, perks it up and in;
+    /// the right ear can also twitch on its own.
+    private static func ear(side: CGFloat, pose: RigPose) -> Ear {
+        let spread = pose.earSpread + (side > 0 ? pose.earTwitch : 0)
+        let flatten = 1 - 0.3 * min(1, max(0, spread) / 40)
+        let pivot = CGPoint(x: faceCenter + side * 4.6, y: 4.4)
+        let swing = -spread * .pi / 180, fold = pose.earTilt * .pi / 180
+        // Drawn upright with +x pointing away from the face, then swung, mirrored, and folded back.
+        func place(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            let y = y * flatten
+            let local = CGPoint(x: x * cos(swing) - y * sin(swing), y: x * sin(swing) + y * cos(swing))
+            let d = CGVector(dx: side * local.x, dy: local.y)
+            return CGPoint(x: pivot.x + d.dx * cos(fold) - d.dy * sin(fold), y: pivot.y + d.dx * sin(fold) + d.dy * cos(fold))
         }
-        let centroid = CGPoint(x: turned.map(\.x).reduce(0, +) / 3, y: turned.map(\.y).reduce(0, +) / 3)
-        let insetPoints = turned.map { centroid + ($0 - centroid) * 0.58 - CGVector(dx: 0, dy: 0.5) }
         let outer = CGMutablePath()
-        outer.move(to: turned[0])
-        outer.addQuadCurve(to: turned[1], control: turned[0] + (turned[1] - turned[0]) * 0.5 + (turned[0] - turned[2]) * 0.12)
-        outer.addQuadCurve(to: turned[2], control: turned[1] + (turned[2] - turned[1]) * 0.5 + (turned[2] - turned[0]) * 0.12)
+        outer.move(to: place(3.7, -2.8))
+        outer.addQuadCurve(to: place(2.2, 6.6), control: place(3.9, 2.4))
+        outer.addQuadCurve(to: place(0.9, 6.7), control: place(1.6, 8))
+        outer.addQuadCurve(to: place(-3.5, 1.4), control: place(-0.8, 4.6))
         outer.closeSubpath()
-        let base = CGPoint(x: (insetPoints[0].x + insetPoints[2].x) / 2, y: (insetPoints[0].y + insetPoints[2].y) / 2)
-        return Ear(outer: outer, inner: polygon(insetPoints), base: base, tip: insetPoints[1])
+
+        let inner = CGMutablePath()
+        inner.move(to: place(2.3, -0.6))
+        inner.addQuadCurve(to: place(1.55, 5.4), control: place(2.7, 2.8))
+        inner.addQuadCurve(to: place(-1.7, 1.8), control: place(-0.1, 3.8))
+        inner.closeSubpath()
+
+        let wisps = CGMutablePath()
+        for (end, bend) in [((-0.9, 3.8), -0.6), ((0.5, 4.6), 0), ((1.8, 3.7), 0.6)] as [((CGFloat, CGFloat), CGFloat)] {
+            wisps.move(to: place(0.4, 0.2))
+            wisps.addQuadCurve(to: place(end.0, end.1), control: place(0.4 + bend, 2.2))
+        }
+        return Ear(outer: outer, inner: inner, wisps: wisps)
     }
 
     /// Pink inside with a few wisps of fur sticking out of the ear.
@@ -999,12 +1173,7 @@ enum AnimeCatFactory {
         context.fillPath()
         context.setStrokeColor(colors.belly)
         context.setLineWidth(0.45)
-        let up = ear.tip - ear.base
-        for offset in [-1.1, 0, 1.1] as [CGFloat] {
-            let start = ear.base + CGVector(dx: offset, dy: -1)
-            context.move(to: start)
-            context.addQuadCurve(to: start + up * 0.6 + CGVector(dx: -offset * 0.3, dy: 0), control: start + up * 0.25 + CGVector(dx: offset * 0.5, dy: 0))
-        }
+        context.addPath(ear.wisps)
         context.strokePath()
     }
 
@@ -1056,29 +1225,45 @@ enum AnimeCatFactory {
     }
 
     private static func drawFace(_ pose: RigPose, colors: Colors, in context: CGContext) {
-        drawEye(pose.eyes, center: CGPoint(x: -2.1, y: 0), size: CGSize(width: 3.6, height: 4.7), colors: colors, in: context)
-        drawEye(pose.eyes, center: CGPoint(x: 3.9, y: -0.1), size: CGSize(width: 4.3, height: 5.2), colors: colors, in: context)
+        // The face is mirrored about the nose's vertical line.
+        let mid: CGFloat = faceCenter
+        let eyeSize = CGSize(width: 4.5, height: 5.2)
+        for side in [-1, 1] as [CGFloat] {
+            let center = CGPoint(x: mid + side * 3.2, y: -0.9)
+            drawEye(pose, center: center, size: eyeSize, side: side, colors: colors, in: context)
+        }
 
         let pink = NSColor(cgColor: colors.pink) ?? .systemPink
-        context.setFillColor(pink.withAlphaComponent(pose.blush ? 0.6 : 0.3).cgColor)
-        context.fillEllipse(in: CGRect(x: 3.6, y: -3.6, width: 3.6, height: 1.6))
-        context.fillEllipse(in: CGRect(x: -4.6, y: -3.4, width: 2.6, height: 1.4))
+        if let blush = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [
+            pink.withAlphaComponent(pose.blush ? 0.75 : 0.45).cgColor, pink.withAlphaComponent(0).cgColor,
+        ] as CFArray, locations: [0, 1]) {
+            for side in [-1, 1] as [CGFloat] {
+                context.saveGState()
+                context.translateBy(x: mid + side * 4.4, y: -4.6)
+                context.scaleBy(x: 2, y: 1.15)
+                context.drawRadialGradient(blush, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: 1, options: [])
+                context.restoreGState()
+            }
+        }
         if pose.blush {
-            context.setStrokeColor(pink.blended(withFraction: 0.3, of: .red)?.cgColor ?? colors.pink)
+            context.setStrokeColor(pink.blended(withFraction: 0.35, of: .red)?.cgColor ?? colors.pink)
             context.setLineWidth(0.3)
-            for x in [4.4, 5.2, 6] as [CGFloat] {
-                context.move(to: CGPoint(x: x, y: -3.3))
-                context.addLine(to: CGPoint(x: x + 0.5, y: -2.3))
+            for side in [-1, 1] as [CGFloat] {
+                for offset in [3.6, 4.4, 5.2] as [CGFloat] {
+                    let x = mid + side * offset
+                    context.move(to: CGPoint(x: x, y: -5.1))
+                    context.addLine(to: CGPoint(x: x + 0.45, y: -4.2))
+                }
             }
             context.strokePath()
         }
 
-        let nose = CGPoint(x: 1.5, y: -2.3)
+        let nose = CGPoint(x: mid, y: -4.1)
         let nosePath = CGMutablePath()
-        nosePath.move(to: CGPoint(x: nose.x - 0.7, y: nose.y + 0.35))
-        nosePath.addQuadCurve(to: CGPoint(x: nose.x + 0.7, y: nose.y + 0.35), control: CGPoint(x: nose.x, y: nose.y + 0.6))
-        nosePath.addQuadCurve(to: CGPoint(x: nose.x, y: nose.y - 0.4), control: CGPoint(x: nose.x + 0.5, y: nose.y - 0.1))
-        nosePath.addQuadCurve(to: CGPoint(x: nose.x - 0.7, y: nose.y + 0.35), control: CGPoint(x: nose.x - 0.5, y: nose.y - 0.1))
+        nosePath.move(to: CGPoint(x: nose.x - 0.55, y: nose.y + 0.3))
+        nosePath.addQuadCurve(to: CGPoint(x: nose.x + 0.55, y: nose.y + 0.3), control: CGPoint(x: nose.x, y: nose.y + 0.5))
+        nosePath.addQuadCurve(to: CGPoint(x: nose.x, y: nose.y - 0.3), control: CGPoint(x: nose.x + 0.4, y: nose.y - 0.05))
+        nosePath.addQuadCurve(to: CGPoint(x: nose.x - 0.55, y: nose.y + 0.3), control: CGPoint(x: nose.x - 0.4, y: nose.y - 0.05))
         context.addPath(nosePath)
         context.setFillColor(pink.blended(withFraction: 0.25, of: .brown)?.cgColor ?? colors.pink)
         context.fillPath()
@@ -1087,20 +1272,20 @@ enum AnimeCatFactory {
         context.setLineWidth(0.4)
         switch pose.mouth {
         case .closed, .tongue:
-            context.move(to: CGPoint(x: nose.x, y: nose.y - 0.4))
-            context.addLine(to: CGPoint(x: nose.x, y: nose.y - 1))
-            context.move(to: CGPoint(x: nose.x - 1.2, y: nose.y - 0.9))
-            context.addQuadCurve(to: CGPoint(x: nose.x, y: nose.y - 1), control: CGPoint(x: nose.x - 0.6, y: nose.y - 1.7))
-            context.addQuadCurve(to: CGPoint(x: nose.x + 1.2, y: nose.y - 0.9), control: CGPoint(x: nose.x + 0.6, y: nose.y - 1.7))
+            context.move(to: CGPoint(x: nose.x, y: nose.y - 0.3))
+            context.addLine(to: CGPoint(x: nose.x, y: nose.y - 0.75))
+            context.move(to: CGPoint(x: nose.x - 0.95, y: nose.y - 0.6))
+            context.addQuadCurve(to: CGPoint(x: nose.x, y: nose.y - 0.75), control: CGPoint(x: nose.x - 0.5, y: nose.y - 1.35))
+            context.addQuadCurve(to: CGPoint(x: nose.x + 0.95, y: nose.y - 0.6), control: CGPoint(x: nose.x + 0.5, y: nose.y - 1.35))
             context.strokePath()
             if pose.mouth == .tongue {
                 context.setFillColor(colors.pink)
-                context.fillEllipse(in: CGRect(x: nose.x - 0.5, y: nose.y - 2.6, width: 1.2, height: 1.4))
+                context.fillEllipse(in: CGRect(x: nose.x - 0.45, y: nose.y - 2.1, width: 1.1, height: 1.3))
             }
         case .open, .wide:
-            let depth: CGFloat = pose.mouth == .open ? 2.2 : 3.4
-            let half: CGFloat = pose.mouth == .open ? 1.2 : 1.5
-            let top = nose.y - 0.8
+            let depth: CGFloat = pose.mouth == .open ? 1.7 : 2.6
+            let half: CGFloat = pose.mouth == .open ? 0.95 : 1.25
+            let top = nose.y - 0.6
             let mouth = CGMutablePath()
             mouth.move(to: CGPoint(x: nose.x - half, y: top))
             mouth.addQuadCurve(to: CGPoint(x: nose.x + half, y: top), control: CGPoint(x: nose.x, y: top + 0.3))
@@ -1126,89 +1311,137 @@ enum AnimeCatFactory {
 
         context.setStrokeColor(NSColor(cgColor: colors.ink)?.withAlphaComponent(0.5).cgColor ?? colors.ink)
         context.setLineWidth(0.25)
-        for end in [CGPoint(x: 12, y: -1.4), CGPoint(x: 12.3, y: -2.9), CGPoint(x: 11.6, y: -4.4)] {
-            context.move(to: CGPoint(x: 6.4, y: -2.8))
-            context.addQuadCurve(to: end, control: CGPoint(x: (6.4 + end.x) / 2, y: end.y + 0.4))
-        }
-        for end in [CGPoint(x: -10.4, y: -2), CGPoint(x: -10.5, y: -3.4)] {
-            context.move(to: CGPoint(x: -8.6, y: -2.7))
-            context.addQuadCurve(to: end, control: CGPoint(x: (-8.6 + end.x) / 2, y: end.y + 0.2))
+        for side in [-1, 1] as [CGFloat] {
+            let start = CGPoint(x: mid + side * 5.6, y: -4.3)
+            for (reach, rise) in [(5.2, 1.3), (5.5, 0), (4.9, -1.3)] as [(CGFloat, CGFloat)] {
+                let end = CGPoint(x: start.x + side * reach, y: start.y + rise)
+                context.move(to: start)
+                context.addQuadCurve(to: end, control: CGPoint(x: (start.x + end.x) / 2, y: end.y + 0.4))
+            }
         }
         context.strokePath()
     }
 
-    /// Big glossy anime eyes: a dark-to-light iris, a large pupil, two catchlights, and a heavy
-    /// upper lash line.
-    private static func drawEye(_ eyes: Eyes, center c: CGPoint, size: CGSize, colors: Colors, in context: CGContext) {
-        let w = size.width, h = size.height
+    /// The x of the nose and mouth, which the eyes, blush, and whiskers mirror around.
+    private static let faceCenter: CGFloat = 0.9
+
+    /// Big glossy anime cat eyes: almond-shaped and tilted up at the outer corner, a gradient iris
+    /// with a dark rim, a vertical cat pupil, catchlights, and a heavy upper lash line. `side` is
+    /// -1 for the left eye and 1 for the right, so the pair mirror each other.
+    private static func drawEye(_ pose: RigPose, center c: CGPoint, size: CGSize, side: CGFloat, colors: Colors, in context: CGContext) {
+        context.saveGState()
+        defer { context.restoreGState() }
+        context.translateBy(x: c.x, y: c.y)
+        context.scaleBy(x: side, y: 1)
+        let scale: CGFloat = pose.eyes == .wide ? 1.08 : 1
+        let w = size.width * scale, h = size.height * scale
+        // In here +x points away from the nose.
+        let inner = CGPoint(x: -w / 2, y: -h * 0.06), outer = CGPoint(x: w / 2, y: h * 0.1)
+        let top = (CGPoint(x: -w * 0.42, y: h * 0.66), CGPoint(x: w * 0.36, y: h * 0.66))
+        let bottom = (CGPoint(x: w * 0.4, y: -h * 0.64), CGPoint(x: -w * 0.36, y: -h * 0.62))
         context.setStrokeColor(colors.lash)
-        switch eyes {
-        case .half:
-            // A content, sleepy squint: lowered lid curve over a sliver of iris.
-            let rect = CGRect(x: c.x - w / 2, y: c.y - h / 2, width: w, height: h)
-            let lidY = c.y - h * 0.12
-            context.saveGState()
-            let sliver = CGMutablePath()
-            sliver.move(to: CGPoint(x: rect.minX, y: lidY))
-            sliver.addQuadCurve(to: CGPoint(x: rect.maxX, y: lidY), control: CGPoint(x: c.x, y: lidY - h * 0.08))
-            sliver.addQuadCurve(to: CGPoint(x: rect.minX, y: lidY), control: CGPoint(x: c.x, y: rect.minY - h * 0.15))
-            context.addPath(sliver)
-            context.clip()
-            context.setFillColor(colors.irisDark)
-            context.fill(rect)
-            context.setFillColor(colors.iris)
-            context.fillEllipse(in: CGRect(x: c.x - w * 0.4, y: rect.minY, width: w * 0.8, height: h * 0.32))
-            context.setFillColor(NSColor.white.cgColor)
-            context.fillEllipse(in: CGRect(x: c.x - w * 0.3, y: lidY - h * 0.2, width: w * 0.22, height: w * 0.22))
-            context.restoreGState()
-            context.setLineWidth(0.95)
-            context.move(to: CGPoint(x: rect.minX - 0.2, y: lidY + 0.1))
-            context.addQuadCurve(to: CGPoint(x: rect.maxX + 0.4, y: lidY + 0.3), control: CGPoint(x: c.x, y: lidY - h * 0.1))
-            context.strokePath()
-        case .closed:
-            context.setLineWidth(0.75)
-            context.move(to: CGPoint(x: c.x - w * 0.55, y: c.y + 0.1))
-            context.addQuadCurve(to: CGPoint(x: c.x + w * 0.55, y: c.y + 0.1), control: CGPoint(x: c.x, y: c.y - h * 0.32))
-            context.move(to: CGPoint(x: c.x + w * 0.55, y: c.y + 0.1))
-            context.addLine(to: CGPoint(x: c.x + w * 0.75, y: c.y + 0.5))
-            context.strokePath()
-        case .happy:
-            context.setLineWidth(0.75)
-            context.move(to: CGPoint(x: c.x - w * 0.55, y: c.y - h * 0.15))
-            context.addQuadCurve(to: CGPoint(x: c.x + w * 0.55, y: c.y - h * 0.15), control: CGPoint(x: c.x, y: c.y + h * 0.45))
-            context.strokePath()
+
+        switch pose.eyes {
         case .open, .wide:
-            let scale: CGFloat = eyes == .wide ? 1.1 : 1
-            let rect = CGRect(x: c.x - w * scale / 2, y: c.y - h * scale / 2, width: w * scale, height: h * scale)
+            let lid = min(1, max(0, pose.lid))
+            func lerp(_ a: CGPoint, _ b: CGPoint) -> CGPoint { CGPoint(x: a.x + (b.x - a.x) * lid, y: a.y + (b.y - a.y) * lid) }
+            let lidControls = (lerp(top.0, bottom.1), lerp(top.1, bottom.0))
+            let visible = CGMutablePath()
+            visible.move(to: inner)
+            visible.addCurve(to: outer, control1: lidControls.0, control2: lidControls.1)
+            visible.addCurve(to: inner, control1: bottom.0, control2: bottom.1)
+            visible.closeSubpath()
+
             context.saveGState()
-            context.addEllipse(in: rect)
+            context.addPath(visible)
             context.clip()
-            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [colors.irisDark, colors.iris, colors.irisLight] as CFArray, locations: [0, 0.5, 1]) {
-                context.drawLinearGradient(gradient, start: CGPoint(x: c.x, y: rect.maxY), end: CGPoint(x: c.x, y: rect.minY), options: [])
+            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [colors.irisDark, colors.iris, colors.irisLight] as CFArray, locations: [0, 0.45, 1]) {
+                context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: h * 0.5), end: CGPoint(x: 0, y: -h * 0.5), options: [])
             }
+            let shift = CGPoint(x: pose.look.dx * side * w * 0.16, y: pose.look.dy * h * 0.1)
             context.setFillColor(colors.lash)
-            let pupil = eyes == .wide
-                ? CGSize(width: w * 0.42, height: w * 0.42)
-                : CGSize(width: w * 0.5, height: h * 0.66)
-            context.fillEllipse(in: CGRect(x: c.x - pupil.width / 2, y: c.y - pupil.height / 2 + h * 0.06, width: pupil.width, height: pupil.height))
+            let pupil = pose.eyes == .wide
+                ? CGSize(width: w * 0.58, height: h * 0.6)
+                : CGSize(width: w * 0.32, height: h * 0.74)
+            context.fillEllipse(in: CGRect(x: shift.x - pupil.width / 2, y: shift.y - pupil.height / 2 + h * 0.03, width: pupil.width, height: pupil.height))
+            // A dark rim around the iris.
+            let rim = CGMutablePath()
+            rim.move(to: inner)
+            rim.addCurve(to: outer, control1: top.0, control2: top.1)
+            rim.addCurve(to: inner, control1: bottom.0, control2: bottom.1)
+            context.addPath(rim)
+            context.setStrokeColor(colors.irisDark)
+            context.setLineWidth(0.7)
+            context.strokePath()
+            // Lit from the upper left on both eyes, so mirror the catchlights back.
+            context.scaleBy(x: side, y: 1)
+            let glint = CGPoint(x: shift.x * side * 0.3, y: shift.y * 0.3)
             context.setFillColor(NSColor.white.withAlphaComponent(0.35).cgColor)
-            context.fillEllipse(in: CGRect(x: c.x - w * 0.3, y: rect.minY + h * 0.06, width: w * 0.6, height: h * 0.22))
+            context.fillEllipse(in: CGRect(x: -w * 0.3, y: -h * 0.42, width: w * 0.6, height: h * 0.2))
             context.setFillColor(NSColor.white.cgColor)
-            context.fillEllipse(in: CGRect(x: c.x - w * 0.4, y: c.y + h * 0.02, width: w * 0.5, height: w * 0.5))
-            context.fillEllipse(in: CGRect(x: c.x + w * 0.1, y: c.y - h * 0.3, width: w * 0.22, height: w * 0.22))
+            context.fillEllipse(in: CGRect(x: glint.x - w * 0.36, y: glint.y + h * 0.04, width: w * 0.42, height: w * 0.42))
+            context.fillEllipse(in: CGRect(x: glint.x + w * 0.12, y: glint.y - h * 0.26, width: w * 0.18, height: w * 0.18))
+            context.fillEllipse(in: CGRect(x: glint.x + w * 0.2, y: glint.y + h * 0.18, width: w * 0.09, height: w * 0.09))
             context.restoreGState()
 
+            context.setStrokeColor(NSColor(cgColor: colors.lash)?.withAlphaComponent(0.55).cgColor ?? colors.lash)
             context.setLineWidth(0.3)
-            context.strokeEllipse(in: rect)
-            context.setLineWidth(1)
-            context.move(to: CGPoint(x: rect.minX - 0.1, y: c.y + h * 0.02))
-            context.addCurve(
-                to: CGPoint(x: rect.maxX + 0.3, y: c.y + h * 0.16),
-                control1: CGPoint(x: rect.minX, y: rect.maxY + 0.25),
-                control2: CGPoint(x: rect.maxX + 0.1, y: rect.maxY + 0.1)
-            )
+            context.move(to: outer)
+            context.addCurve(to: inner, control1: bottom.0, control2: bottom.1)
+            context.strokePath()
+            context.setStrokeColor(colors.lash)
+            context.setLineWidth(0.95)
+            context.move(to: CGPoint(x: inner.x - 0.1, y: inner.y))
+            context.addCurve(to: outer, control1: lidControls.0, control2: lidControls.1)
+            context.strokePath()
+            context.setLineWidth(0.6)
+            context.move(to: outer)
+            context.addLine(to: CGPoint(x: outer.x + 0.75, y: outer.y + 0.4 - lid * 0.5))
+            context.strokePath()
+        case .half:
+            drawContentEye(w: w, h: h, colors: colors, in: context)
+        case .closed:
+            context.setLineWidth(0.8)
+            context.move(to: CGPoint(x: inner.x + w * 0.1, y: inner.y))
+            context.addQuadCurve(to: CGPoint(x: outer.x - w * 0.05, y: outer.y - h * 0.1), control: CGPoint(x: 0, y: -h * 0.36))
+            context.strokePath()
+            context.setLineWidth(0.5)
+            context.move(to: CGPoint(x: outer.x - w * 0.05, y: outer.y - h * 0.1))
+            context.addLine(to: CGPoint(x: outer.x + 0.55, y: outer.y + 0.15))
+            context.strokePath()
+        case .happy:
+            context.setLineWidth(0.8)
+            context.move(to: CGPoint(x: -w * 0.42, y: -h * 0.18))
+            context.addQuadCurve(to: CGPoint(x: w * 0.42, y: -h * 0.12), control: CGPoint(x: 0, y: h * 0.42))
             context.strokePath()
         }
+    }
+
+    /// A content, sleepy squint: a lowered, curved lid over a sliver of iris.
+    private static func drawContentEye(w: CGFloat, h: CGFloat, colors: Colors, in context: CGContext) {
+        let rect = CGRect(x: -w / 2, y: -h / 2, width: w, height: h)
+        let lidEnds = -h * 0.08, lidControl = -h * 0.5
+        context.saveGState()
+        context.addEllipse(in: rect)
+        context.clip()
+        let below = CGMutablePath()
+        below.move(to: CGPoint(x: rect.minX - 1, y: lidEnds))
+        below.addQuadCurve(to: CGPoint(x: rect.maxX + 1, y: lidEnds), control: CGPoint(x: 0, y: lidControl))
+        below.addLine(to: CGPoint(x: rect.maxX + 1, y: rect.minY - 1))
+        below.addLine(to: CGPoint(x: rect.minX - 1, y: rect.minY - 1))
+        below.closeSubpath()
+        context.addPath(below)
+        context.clip()
+        context.setFillColor(colors.iris)
+        context.fill(rect)
+        context.setFillColor(colors.irisLight)
+        context.fillEllipse(in: CGRect(x: -w * 0.35, y: rect.minY, width: w * 0.7, height: h * 0.14))
+        context.restoreGState()
+        context.setStrokeColor(colors.lash)
+        context.setLineWidth(0.85)
+        context.move(to: CGPoint(x: rect.minX - 0.1, y: lidEnds))
+        context.addQuadCurve(to: CGPoint(x: rect.maxX + 0.1, y: lidEnds), control: CGPoint(x: 0, y: lidControl))
+        context.strokePath()
     }
 
     private static func drawZs(_ pose: RigPose, colors: Colors) {
