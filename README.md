@@ -24,7 +24,7 @@ Purrsistent is a native macOS desktop pet. A small animated cat strolls along th
 - **Treats and mood**: give it a fish treat and it trots over to eat it. Its mood rises with attention and slowly fades when it's ignored, and a happier cat plays more.
 - **Break reminders**: optionally reminds you to stretch, drink water, or rest your eyes, in a little speech bubble.
 - **Coats**: Orange, Midnight, Silver, and Snowball, or your own artwork.
-- **Sounds**: real cat recordings for meows, a surprised chirp, and a soft purr, plus a thud on landing.
+- **Sounds**: real cat recordings for meows, a surprised chirp, and a soft purr, plus a thud on landing. Pick a voice: Classic, Kitten, or Tomcat.
 - **Stays out of the way**: no Dock icon, and clicks on transparent pixels pass through.
 - **Menu bar controls**: everything is in the paw icon in the menu bar, or right-click the cat.
 
@@ -68,7 +68,9 @@ The menu bar icon and the right-click menu offer the same options:
 - **Size**: Small, Medium, Large
 - **Speed**: Slow, Normal, Fast
 - **Stay Still**: no wandering, just idling, sitting, grooming, and sleeping
-- **Sounds** on/off and **Volume**: Low, Medium, High
+- **Sounds** on/off
+- **Voice**: Classic (a steady adult cat), Kitten (high, squeaky mews), Tomcat (a talkative tom), plus Custom when you've added your own sounds. Picking one plays a sample meow.
+- **Volume**: Low, Medium, High
 - **Break Reminders**: Off, or every 25, 45, or 60 minutes
 - **Launch at Login**: only works from the bundled `.app`
 - **Quit**
@@ -100,6 +102,8 @@ swift build
 ### Sounds (`Resources/Sounds/`)
 
 Effects: `meow`, `chirp`, `thud`, `purr`.
+
+Each voice has its own folder (`Classic/`, `Kitten/`, `Tomcat/`). Files in the selected voice's folder win; anything missing there comes from `Resources/Sounds/` itself, which holds the shared `purr` and `thud`. To use your own cat, put its sounds in `Resources/Sounds/Custom/`, rebuild, and pick **Voice → Custom**.
 
 - Supported formats: `.wav`, `.aiff`, `.caf`, `.mp3`, `.m4a`.
 - Add variations as `meow_0.wav`, `meow_1.wav`, ... and one is picked at random each time.
@@ -139,7 +143,7 @@ Sources/Purrsistent/
   Settings.swift           Persisted preferences
 Resources/
   Sprites/                 Optional custom animation frames
-  Sounds/                  Cat recordings and the landing thud
+  Sounds/                  Shared purr and thud, plus one folder of meows and chirps per voice
 scripts/bundle.sh          Builds Purrsistent.app
 assets/                    Logo and images used in this README
 ```
@@ -156,8 +160,10 @@ The cat sounds are real recordings. Each was trimmed, faded, and loudness-matche
 
 | Files | Source | Author | License |
 | --- | --- | --- | --- |
-| `meow_0`–`meow_3` | [Cat_meow.wav](https://freesound.org/people/cribbler/sounds/511448/) | cribbler | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
-| `chirp_0`–`chirp_2` | [Cat Chirps.wav](https://freesound.org/people/Tyler31898/sounds/634174/) | Tyler31898 | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `Classic/meow_*` | [Cat_meow.wav](https://freesound.org/people/cribbler/sounds/511448/) | cribbler | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `Classic/chirp_*` | [Cat Chirps.wav](https://freesound.org/people/Tyler31898/sounds/634174/) | Tyler31898 | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `Kitten/*` | [Kitten meows](https://freesound.org/people/Luke100000/sounds/476918/) | Luke100000 | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `Tomcat/*` | [Tom cat meow.wav](https://freesound.org/people/tosha73/sounds/506723/) | tosha73 | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `purr_0` | [Purr (10 sec loopable).ogg](https://commons.wikimedia.org/wiki/File:Purr_(10_sec_loopable).ogg) | Insanejeff at English Wikipedia | Public domain |
 
 The landing `thud` is synthesized by `SoundFactory.swift`.

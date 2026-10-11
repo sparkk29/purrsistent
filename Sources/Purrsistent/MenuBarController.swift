@@ -55,6 +55,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         menu.addItem(toggle("Sounds", isOn: settings.soundEnabled) { [settings] in settings.soundEnabled.toggle() })
+        let voices = Voice.allCases.filter { $0 != .custom || SoundPlayer.hasCustomVoice() || settings.voice == .custom }
+        menu.addItem(choices("Voice", voices, selected: settings.voice, title: \.title) { [settings, pet] in
+            settings.voice = $0
+            pet.previewSound()
+        })
         menu.addItem(choices("Volume", SoundVolume.allCases, selected: settings.soundVolume, title: \.title) { [settings, pet] in
             settings.soundVolume = $0
             pet.previewSound()

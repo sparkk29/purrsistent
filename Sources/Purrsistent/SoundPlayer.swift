@@ -5,11 +5,14 @@ enum SoundEffect: String, CaseIterable {
 }
 
 /// Sounds are looked up as `<name>.<ext>` or variations `<name>_0.<ext>, <name>_1.<ext>, ...`
-/// (one is picked at random). Missing sounds fall back to the synthesized placeholders.
+/// (one is picked at random), first in the voice's folder, then in the shared sounds folder.
+/// Missing sounds fall back to the synthesized placeholders.
 @MainActor
 final class SoundPlayer {
-    private static let extensions = ["wav", "aiff", "aif", "caf", "mp3", "m4a"]
+    private nonisolated static let extensions = ["wav", "aiff", "aif", "caf", "mp3", "m4a"]
 
+    private let soundDirectories: [URL]
+    private var voice: Voice?
     private var clips: [SoundEffect: [Data]] = [:]
     private var activePlayers: [AVAudioPlayer] = []
     private var loopPlayer: AVAudioPlayer?
@@ -26,9 +29,25 @@ final class SoundPlayer {
         didSet { loopPlayer?.volume = loopVolume * masterVolume }
     }
 
-    init(soundDirectories: [URL] = SoundPlayer.defaultSoundDirectories()) {
+    init(voice: Voice, soundDirectories: [URL] = SoundPlayer.defaultSoundDirectories()) {
+        self.soundDirectories = soundDirectories
+        load(voice: voice)
+    }
+
+    func load(voice: Voice) {
+        guard voice != self.voice else { return }
+        self.voice = voice
+        let directories = soundDirectories.map { $0.appendingPathComponent(voice.folder, isDirectory: true) } + soundDirectories
         for effect in SoundEffect.allCases {
-            clips[effect] = Self.loadClips(for: effect, from: soundDirectories) ?? SoundFactory.clips(for: effect)
+            clips[effect] = Self.loadClips(for: effect, from: directories) ?? SoundFactory.clips(for: effect)
+        }
+    }
+
+    nonisolated static func hasCustomVoice(in directories: [URL] = defaultSoundDirectories()) -> Bool {
+        directories.contains { directory in
+            let folder = directory.appendingPathComponent(Voice.custom.folder, isDirectory: true)
+            let files = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+            return files.contains { extensions.contains(($0 as NSString).pathExtension.lowercased()) }
         }
     }
 

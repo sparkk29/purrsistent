@@ -48,6 +48,14 @@ enum Coat: String, CaseIterable {
     var title: String { rawValue.capitalized }
 }
 
+/// Which cat's meows and chirps to use. Each voice lives in `Resources/Sounds/<folder>/`.
+enum Voice: String, CaseIterable {
+    case classic, kitten, tomcat, custom
+
+    var title: String { rawValue.capitalized }
+    var folder: String { title }
+}
+
 enum BreakInterval: Int, CaseIterable {
     case off = 0
     case every25 = 25
@@ -73,6 +81,7 @@ final class Settings {
         static let stayStill = "stayStill"
         static let soundEnabled = "soundEnabled"
         static let soundVolume = "soundVolume"
+        static let voice = "voice"
         static let breakInterval = "breakInterval"
         static let coat = "coat"
         static let moodValue = "moodValue"
@@ -123,6 +132,14 @@ final class Settings {
         get { defaults.string(forKey: Keys.soundVolume).flatMap(SoundVolume.init(rawValue:)) ?? .medium }
         set {
             defaults.set(newValue.rawValue, forKey: Keys.soundVolume)
+            onChange?()
+        }
+    }
+
+    var voice: Voice {
+        get { defaults.string(forKey: Keys.voice).flatMap(Voice.init(rawValue:)) ?? .classic }
+        set {
+            defaults.set(newValue.rawValue, forKey: Keys.voice)
             onChange?()
         }
     }

@@ -7,7 +7,7 @@ final class PetController: NSObject, PetViewDelegate {
     private let view: PetView
     private let animator: SpriteAnimator
     private let machine = PetStateMachine()
-    private let sound = SoundPlayer()
+    private let sound: SoundPlayer
     private let bubble = BubbleWindow()
     private let reminder = BreakReminder()
     private let mood: Mood
@@ -56,6 +56,7 @@ final class PetController: NSObject, PetViewDelegate {
         window = PetWindow(size: size)
         view = PetView(frame: NSRect(x: 0, y: 0, width: size, height: size))
         animator = SpriteAnimator(coat: settings.coat)
+        sound = SoundPlayer(voice: settings.voice)
         mood = Mood(settings: settings)
         super.init()
 
@@ -207,6 +208,7 @@ final class PetController: NSObject, PetViewDelegate {
         machine.allowWalking = !settings.stayStill
         sound.isEnabled = settings.soundEnabled
         sound.masterVolume = settings.soundVolume.level
+        sound.load(voice: settings.voice)
         reminder.interval = settings.breakInterval.seconds
         animator.load(coat: settings.coat)
         if isVisible, Self.purrs(in: machine.state) {
